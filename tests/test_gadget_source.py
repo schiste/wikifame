@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 GADGET_SOURCE = (Path(__file__).parents[1] / "wikifame.js").read_text()
@@ -46,6 +47,18 @@ def test_gadget_hardcodes_no_wiki_specific_page_titles() -> None:
     assert "Bac à sable" not in GADGET_SOURCE
     assert "Aide:Comment modifier une page" not in GADGET_SOURCE
     assert "'Utilisateur:'" not in GADGET_SOURCE
+
+
+def test_every_config_value_the_gadget_reads_is_actually_requested() -> None:
+    """mw.config.get returns only what it was asked for; a missing name is undefined.
+
+    configPage() reads wgUserName, so leaving it out of the request list silently
+    disables the configuration page for everyone instead of failing loudly.
+    """
+    requested = set(re.findall(r"'(wg\w+)'", GADGET_SOURCE.split("mw.config.get( [", 1)[1]))
+    used = set(re.findall(r"config\.(wg\w+)", GADGET_SOURCE))
+
+    assert used - requested == set()
 
 
 def test_config_page_lives_beside_the_script_in_the_readers_own_user_space() -> None:

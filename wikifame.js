@@ -89,7 +89,8 @@
 		'wgNamespaceNumber',
 		'wgPageName',
 		'wgRevisionId',
-		'wgUserLanguage'
+		'wgUserLanguage',
+		'wgUserName'
 	] );
 
 	var numberFormatter;
