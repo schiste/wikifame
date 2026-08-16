@@ -1,11 +1,17 @@
 # WikiFame
 
-WikiFame makes the people behind French Wikipedia articles visible. Its first interface is a
-MediaWiki gadget that displays a short attribution below an article title:
+WikiFame makes the people behind Wikipedia articles visible. Its first interface is a MediaWiki
+gadget that displays a short attribution below an article title:
 
 > Article rédigé par Alice, Bob, Charlie et 44 autres personnes.
 
-The three names link to user pages. “44 autres personnes” links to the article history.
+> Article written by Alice, Bob, Charlie and 44 other people.
+
+The three names link to user pages; the remainder links to the article history. The sentence is
+localised into the reader's interface language, and each wiki can adjust its own wording.
+
+One file runs everywhere. The gadget reports which wiki it is on, and the API serves any Wikipedia
+WikiWho covers — around seventy language editions — with no per-wiki code change.
 
 ## Acknowledgements
 
@@ -14,7 +20,8 @@ and their daughter**. This project turns their family idea into an open Wikimedi
 
 ## Components
 
-- `wikifame.js` and `wikifame.css`: personal-script prototype.
+- `wikifame.js` and `wikifame.css`: wiki-agnostic, localised personal-script prototype.
+- `src/wikifame/sites.py`: resolves a database name to a WikiWho language and Wikipedia host.
 - `src/wikifame/app.py`: read-only FastAPI service for the gadget.
 - `src/wikifame/worker.py`: durable WikiWho calculation worker.
 - `src/wikifame/prewarm.py`: preloads popular articles from Wikimedia pageviews.
@@ -35,10 +42,14 @@ policy, update behavior, privacy, and the path toward millions of articles.
 - [API contract](docs/api.md): stable request and response shapes consumed by the gadget.
 - [Operations runbook](docs/operations.md): Toolforge deployment, jobs, monitoring, incidents,
   backups, and maintainer transfer.
+- [On-wiki setup](docs/onwiki-setup.md): installing the script on a wiki and configuring it,
+  for anyone who wants to run it.
 - [ADR-0001](docs/decisions/0001-attribution-policy.md): accepted attribution policy and its
   known limitations.
 - [ADR-0002](docs/decisions/0002-page-freshness.md): 90-day page freshness and stale-while-
   revalidate behavior.
+- [ADR-0003](docs/decisions/0003-universal-wiki-support.md): universal wiki support, demand-driven
+  prewarming, and per-wiki on-wiki configuration.
 - [Contributing](CONTRIBUTING.md): local workflow and change checklist.
 - [Agent guide](AGENTS.md): repository invariants and commands for coding agents.
 
@@ -72,20 +83,48 @@ Run the test suite:
 
 ## Personal-script installation
 
-Copy the repository files to these pages on French Wikipedia:
-
-- `Utilisateur:YOUR_USERNAME/wikifame.js`
-- `Utilisateur:YOUR_USERNAME/wikifame.css`
-
-Then load them from `Utilisateur:YOUR_USERNAME/common.js`:
+Copy the repository files to your user-page subpages on any covered Wikipedia — for example
+`User:YOUR_USERNAME/wikifame.js` and `User:YOUR_USERNAME/wikifame.css`, or their localised
+namespace name such as `Utilisateur:` on French Wikipedia. Optionally add
+`User:YOUR_USERNAME/wikifame-config.json` from [`config/`](config). Then load the first two from
+your `common.js`:
 
 ```javascript
-importScript( 'Utilisateur:YOUR_USERNAME/wikifame.js' );
-importStylesheet( 'Utilisateur:YOUR_USERNAME/wikifame.css' );
+importScript( 'User:YOUR_USERNAME/wikifame.js' );
+importStylesheet( 'User:YOUR_USERNAME/wikifame.css' );
 ```
+
+The same unmodified files work on every wiki. Where the API does not serve a wiki, the script
+renders nothing.
 
 Do not load the previous `ContributeursHumains` pages at the same time: both scripts would request
 the same attribution and attempt to render a summary.
+
+## Per-wiki configuration
+
+Alongside the script, you can create `User:YOUR_USERNAME/wikifame-config.json` on the same wiki. It
+is optional — without it the script uses its built-in text in your interface language. Its one real
+job is supplying the two local titles the script cannot guess:
+
+```json
+{
+	"enabled": true,
+	"showHistoryIntro": true,
+	"editHelpPage": "Aide:Comment modifier une page",
+	"sandboxPage": "Wikipédia:Bac à sable",
+	"messages": {}
+}
+```
+
+Defaults per wiki are published in [`config/`](config): [`enwiki.json`](config/enwiki.json),
+[`frwiki.json`](config/frwiki.json). Copy the one for your wiki; send a pull request if you work
+out the titles for a wiki that has none yet.
+
+Keeping this in user space means installing and configuring WikiFame needs no special rights. When
+a community adopts it as a site-wide gadget, the same file moves to
+`MediaWiki:Wikifame-config.json`.
+
+Full instructions, field reference, and troubleshooting: [on-wiki setup](docs/onwiki-setup.md).
 
 ## Toolforge deployment
 

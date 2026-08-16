@@ -1,8 +1,34 @@
 # Architecture and scaling rules
 
+## Which wikis exist, and which are switched on
+
+Two questions are answered separately.
+
+**Can this wiki be analysed?** `wikifame/sites.py` strips the `wiki` suffix from the database
+name and checks the remainder against the set of WikiWho language codes. Every such code is
+dash-free, so `frwiki` resolves to `fr` and therefore to `fr.wikipedia.org` exactly. The same
+rule excludes everything else without a denylist: `frwikisource` fails the suffix test, and
+`commonswiki` and `wikidatawiki` yield language codes WikiWho does not publish. Because the rule
+is purely syntactic it needs no sitematrix call, which is what keeps the FastAPI process free of
+upstream dependencies. `WIKIWHO_LANGUAGES` overrides the built-in set if coverage changes.
+
+**Is this wiki switched on?** `SUPPORTED_WIKIS` decides, and defaults to `*`. Capability always
+wins over configuration, so listing a wiki WikiWho cannot analyse does not enable it.
+
+Serving is universal; work is not. `PREWARM_WIKIS` pins wikis to keep warm, and `BACKFILL_WIKIS`
+defaults to empty. A wiki nobody reads therefore costs nothing. See
+[ADR-0003](decisions/0003-universal-wiki-support.md).
+
+The gadget is one wiki-agnostic file. It reports `wgDBname` and lets the API decide; a wiki that
+is off answers `404` and the gadget renders nothing. Wording, help links, and a local opt-out live
+in an on-wiki JSON page, so they change without a deployment. While WikiFame is a personal script
+that page is `User:<name>/wikifame-config.json`, next to the script itself, which keeps setup free
+of any rights requirement; a site-wide gadget would move it to `MediaWiki:Wikifame-config.json`. A
+missing page yields the built-in defaults, and per-wiki defaults are published in `config/`.
+
 ## Request path
 
-1. The gadget requests `GET /v2/frwiki/pages/{page_id}?revision_id={revision_id}`.
+1. The gadget requests `GET /v2/{wiki}/pages/{page_id}?revision_id={revision_id}`.
 2. The API selects the newest result for the page and current algorithm.
 3. A result younger than 90 days is returned with a bounded one-day browser cache.
 4. An older result is returned immediately and a P100 refresh is enqueued in the background.
@@ -10,6 +36,11 @@
 6. A continuous worker validates that the requested revision is still current.
 7. The worker fetches token provenance from WikiWho, resolves user IDs through the
    MediaWiki Action API, obtains the historical editor count, and stores a compact result.
+8. On the first stored result for a wiki, the worker records it in `active_wikis`, which enrols
+   that wiki into daily prewarming from then on.
+
+Step 8 is deliberately triggered by a completed calculation rather than by an incoming request,
+so a scripted client cannot enrol every Wikipedia into scheduled work by poking every URL.
 
 No WikiWho request runs in the web process. A unique database constraint collapses a
 thundering herd for the same page and revision into one job.
@@ -68,8 +99,8 @@ review, maintenance, media work, reverted contributions, or the quality of an ed
 | Priority | Source | Purpose |
 | --- | --- | --- |
 | 100 | Live gadget cache miss | Serve demonstrated reader demand first |
-| 50 | Union of seven available daily top-1000 lists | Keep likely requests warm |
-| 10 | Resumable alphabetical backfill | Grow long-tail coverage without starving demand |
+| 50 | Union of seven available daily top-1000 lists, per active wiki | Keep likely requests warm |
+| 10 | Resumable alphabetical backfill, opt-in wikis only | Grow long-tail coverage without starving demand |
 
 Workers retry transient failures with exponential backoff capped at six hours. A lease makes a
 job recoverable after a worker crash. Two worker replicas are the conservative starting point;
@@ -78,6 +109,12 @@ increase concurrency only after agreeing on a safe rate with WikiWho operators.
 The Analytics dataset can be published several days late. Prewarm scans backwards, skips `404`
 days, and stops after finding seven available daily lists. Each run only queues pages whose newest
 result has passed the 90-day window, so recurring popularity does not cause repeated WikiWho work.
+It repeats that scan for every active wiki, isolating failures so one unavailable wiki does not
+cancel the rest of the run.
+
+Prewarm cost therefore grows with the number of wikis readers actually use, bounded at 1000 pages
+per wiki per day and further reduced by the freshness check. Backfill cost does not grow at all
+unless an operator opts a wiki in.
 
 ## Millions of pages
 
@@ -90,15 +127,18 @@ For sustained multi-million coverage:
 1. Measure average row and index size after the first 100,000 pages.
 2. Keep only the newest result per page plus a short revision grace period.
 3. Rate-limit backfill to the capacity explicitly accepted by WikiWho.
-4. Move to a dedicated Trove database before ToolsDB reaches operational limits.
+4. Move to a dedicated Trove database before ToolsDB reaches operational limits. Universal serving
+   makes this arrive sooner: all Wikipedias together hold on the order of 65 million articles.
 5. If the gadget becomes default for readers, migrate the API behind Wikimedia production
    caching; Toolforge is appropriate for an opt-in prototype, not Wikipedia-wide request volume.
 
 ## Abuse and privacy
 
-The public API accepts only configured wikis and positive numeric IDs. Workers reject missing,
-non-main-namespace, and stale revisions before contacting WikiWho. CORS limits browser use to
-French Wikipedia, although CORS is not authentication and cannot prevent scripted traffic.
+The public API accepts only analysable, enabled wikis and positive numeric IDs. Workers reject
+missing, non-main-namespace, and stale revisions before contacting WikiWho. CORS limits browser
+use to Wikipedia origins, although CORS is not authentication and cannot prevent scripted traffic.
+Widening the origin regex to every Wikipedia does not change what an unauthenticated scripted
+client could already do.
 
 Revision-specific responses contain no reader identifier and are safe for public caching. The
 service still receives an IP address and article ID on a cache miss, so access logs should use
@@ -112,5 +152,10 @@ short retention and must never be repurposed as reader profiles.
 - `Base.metadata.create_all()` creates a fresh schema but is not a migration framework. Introduce
   versioned migrations before changing a database that already contains production data.
 - The gadget has no page-specific fixture; every article uses traceable Toolforge data.
+- WikiWho covers Wikipedia only. Commons, Wikidata, Wiktionary, and Wikisource have no surviving-
+  token provenance at all, so the dividing line is the project, not the language.
+- Database-name resolution assumes every WikiWho language code is dash-free. A dashed code such
+  as `be-tarask`, or coverage beyond Wikipedia, would require a real sitematrix lookup in
+  `wikifame/sites.py`.
 - Toolforge is the prototype host. A default gadget for all readers requires a Wikimedia-scale
   request path and privacy review.

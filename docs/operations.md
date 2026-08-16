@@ -15,17 +15,17 @@ Before production use, ensure at least two maintainers have:
 
 Update `WIKIFAME_USER_AGENT` whenever the operational contact changes.
 
-The personal-script prototype uses `Utilisateur:NAME/wikifame.js` and
-`Utilisateur:NAME/wikifame.css`. Its `common.js` must not simultaneously import the former
-`ContributeursHumains` filenames.
+The personal-script prototype lives on the user-page subpages `wikifame.js` and `wikifame.css` of
+each maintainer's account, on whichever wiki they use. Its `common.js` must not simultaneously
+import the former `ContributeursHumains` filenames.
 
 ## External dependencies
 
 | Dependency | Purpose | Failure behavior |
 | --- | --- | --- |
-| French Wikipedia Action API | Page/revision validation and user resolution | Job retries |
+| Wikipedia Action API, per wiki | Page/revision validation and user resolution | Job retries |
 | MediaWiki REST history counts | Aggregate contributor count | Job retries |
-| WikiWho French API | Surviving-token provenance | Job retries with backoff |
+| WikiWho API, per language | Surviving-token provenance | Job retries with backoff |
 | Wikimedia Analytics API | Popular-page prewarming | Only the scheduled prewarm fails |
 | ToolsDB MariaDB | Results, leases, durable queue, backfill cursor | API health fails; workers stop |
 
@@ -69,14 +69,60 @@ The API web process never calls these upstream services. Only workers and schedu
    `202 pending` to `200 ready` before publishing the gadget URL.
 
 No database migration is required for the page-freshness release: it reuses the existing
-`computed_at` column and page/algorithm index. The three new environment controls are:
+`computed_at` column and page/algorithm index. Its three environment controls are:
 
 - `PAGE_FRESHNESS_SECONDS` (default `7776000`, 90 days);
 - `PAGE_CACHE_SECONDS` (default `86400`, one day);
 - `PAGE_STALE_WHILE_REVALIDATE_SECONDS` (default `604800`, seven days).
 
+The universal-wiki release adds the `active_wikis` table, which `create_all()` creates on first
+start; no migration is required either. Its environment controls are:
+
+- `SUPPORTED_WIKIS` (default `*`): wikis served on demand. A list of database names narrows it.
+  A wiki WikiWho cannot analyse is never served, whether or not it appears here.
+- `PREWARM_WIKIS` (default empty): wikis pinned for daily top-1000 prewarming, in addition to the
+  wikis discovered automatically.
+- `BACKFILL_WIKIS` (default empty): wikis crawled article by article. Never inferred.
+- `WIKIWHO_LANGUAGES` (default empty): overrides the built-in WikiWho coverage list.
+- `CORS_ORIGIN_REGEX` (default matches every Wikipedia, desktop and mobile).
+
 Toolforge environment-variable configuration is deployment state, not source code. Record the
 variable names—not their values—in the maintainer handoff.
+
+## Enabling a wiki
+
+Serving requires no action: `SUPPORTED_WIKIS=*` already answers for every WikiWho-covered
+Wikipedia, and the first result a worker stores enrols that wiki into daily prewarming. What
+remains is a community conversation before the script is advertised on that wiki.
+
+Check current state with `GET /v1/stats`: `supported_wikis` is the configured enablement,
+`active_wikis` is what is actually being prewarmed.
+
+To pin a wiki before its first reader arrives, add it to `PREWARM_WIKIS`. To prime it by hand:
+
+```bash
+python -m wikifame.prewarm --wiki dewiki --days 1
+```
+
+Enable `BACKFILL_WIKIS` only after measuring row size. English Wikipedia alone has millions of
+articles against a nominal 25 GB ToolsDB boundary.
+
+### The on-wiki configuration page
+
+While WikiFame is a personal script, each user's settings live at
+`User:<name>/wikifame-config.json` on the wiki, next to their copy of the script. Per-wiki defaults
+are published in [`config/`](../config) for people to copy; the full field reference and
+troubleshooting steps are in [on-wiki setup](onwiki-setup.md).
+
+Operationally this means the service has no say in it, by design: installing, configuring, and
+switching the script off all happen in user space with no rights and no deployment. Expect to learn
+about a local opt-out from a page history, not from a ticket.
+
+Edits propagate within minutes (`action=raw` is CDN-cached) and reach a given reader on their next
+browser session, or after 24 hours at the latest.
+
+When a community adopts the script as a site-wide gadget, its configuration moves to
+`MediaWiki:Wikifame-config.json` on that wiki, maintained by its interface administrators.
 
 ## Normal deployment
 
@@ -95,21 +141,25 @@ Confirm `/healthz`, inspect webservice logs, and check that both worker replicas
 | Job | Type | Expected behavior |
 | --- | --- | --- |
 | `attribution-worker` | Continuous, two replicas | Claims durable jobs and calls WikiWho |
-| `popular-prewarm` | Daily | Scans backward to enqueue seven available top-1000 lists at P50 |
-| `gradual-backfill` | Hourly | Enqueues one resumable alphabetical batch at P10 |
+| `popular-prewarm` | Daily | Per active wiki, scans backward to enqueue seven available top-1000 lists at P50 |
+| `gradual-backfill` | Hourly | Per `BACKFILL_WIKIS` entry, enqueues one resumable alphabetical batch at P10 |
 | `cache-cleanup` | Weekly | Removes old failed work and superseded result revisions |
 
 Live gadget misses and expired results enqueue P100 work. Prewarm and backfill skip any page with
 a result younger than `PAGE_FRESHNESS_SECONDS`. Do not increase worker replicas until WikiWho
 capacity and observed latency justify it.
 
+Prewarm runtime grows with the number of active wikis, so watch its duration as wikis are
+discovered. Each wiki is isolated: one unavailable wiki logs and is skipped rather than cancelling
+the run. `gradual-backfill` does nothing while `BACKFILL_WIKIS` is empty.
+
 ## Monitoring
 
 Check:
 
 - `/healthz` for database reachability;
-- `/v1/stats` occasionally for queue growth and dead items;
-- `/v2/frwiki/pages/{page_id}?revision_id={revision_id}` for `is_fresh`, `refreshing`, and the
+- `/v1/stats` occasionally for queue growth, dead items, and the `active_wikis` list;
+- `/v2/{wiki}/pages/{page_id}?revision_id={revision_id}` for `is_fresh`, `refreshing`, and the
   `X-WikiFame-Source-Revision` header on a known article;
 - `toolforge webservice buildservice logs -f` for API errors;
 - `toolforge jobs logs attribution-worker -f` for upstream or worker failures;
@@ -131,6 +181,13 @@ Reader-demand jobs have higher priority and should recover first.
 Leave cached `200` responses online. V2 deliberately continues returning an expired result while
 its refresh retries. Pause prewarm/backfill if the outage is prolonged. Jobs use exponential
 backoff, and exhausted transient jobs can revive after `DEAD_RETRY_SECONDS`.
+
+### A community wants the gadget off, or its wording changed
+
+This is a local decision and needs no deployment. Each user sets `"enabled": false` in their own
+`User:<name>/wikifame-config.json`, or simply removes the import from their `common.js`. Removing
+the wiki from `SUPPORTED_WIKIS` is the operator-side equivalent and is only needed when the wiki
+must stop being served entirely.
 
 ### A policy result is wrong
 
@@ -164,5 +221,7 @@ to test restoration before a migration.
 - Review Toolforge variables, job status, database name/size, and last backup.
 - Share the WikiWho contact history and any agreed request-rate limits.
 - Identify the on-wiki personal script/gadget pages and interface-administrator contacts.
+- List the wikis in `active_wikis`, the on-wiki script and configuration pages in use on each,
+  and any community agreements made when each wiki was enabled.
 - Review open incidents, dead queue reasons, algorithm version, and current gadget behavior.
 - Rotate credentials that were personally controlled.
