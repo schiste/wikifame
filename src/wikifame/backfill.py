@@ -36,14 +36,15 @@ def main() -> None:
         for _batch in range(max(1, args.batches)):
             pages, next_cursor = mediawiki.all_pages_batch(args.wiki, cursor or None)
             for page in pages:
-                runtime.repository.enqueue(
-                    args.wiki,
-                    page.page_id,
-                    page.revision_id,
-                    runtime.settings.algorithm_version,
+                if runtime.repository.enqueue_if_stale(
+                    wiki=args.wiki,
+                    page_id=page.page_id,
+                    revision_id=page.revision_id,
+                    algorithm_version=runtime.settings.algorithm_version,
                     priority=10,
-                )
-                queued += 1
+                    freshness_seconds=runtime.settings.page_freshness_seconds,
+                ):
+                    queued += 1
             cursor = next_cursor
             runtime.repository.set_state(state_key, cursor or COMPLETE)
             if cursor is None:

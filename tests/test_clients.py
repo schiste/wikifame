@@ -1,9 +1,10 @@
 import json
+from datetime import date
 
 import httpx
 import pytest
 
-from wikifame.clients import WikiWhoClient
+from wikifame.clients import AnalyticsClient, WikiWhoClient
 from wikifame.errors import ResponseTooLargeError
 
 
@@ -47,4 +48,17 @@ def test_wikiwho_response_size_is_bounded() -> None:
 
     with pytest.raises(ResponseTooLargeError):
         client.fetch_revision("frwiki", 200)
+    client.close()
+
+
+def test_unpublished_pageview_day_returns_none() -> None:
+    client = AnalyticsClient("tests", 1)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"title": "Not Found"})
+
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    assert client.top_pages("frwiki", date(2026, 8, 15)) is None
     client.close()

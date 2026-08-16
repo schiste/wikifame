@@ -285,7 +285,7 @@ class AnalyticsClient:
             follow_redirects=True,
         )
 
-    def top_pages(self, wiki: str, day: date) -> list[str]:
+    def top_pages(self, wiki: str, day: date) -> list[str] | None:
         host = WIKI_HOSTS[wiki]
         url = (
             "https://wikimedia.org/api/rest_v1/metrics/pageviews/top/"
@@ -293,6 +293,8 @@ class AnalyticsClient:
         )
         try:
             response = self.client.get(url)
+            if response.status_code == 404:
+                return None
             response.raise_for_status()
             data = response.json()
         except (httpx.HTTPError, ValueError) as error:
