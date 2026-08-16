@@ -25,13 +25,16 @@ class Worker:
         self.repository: Repository = runtime.repository
         self.worker_id = worker_id or f"{socket.gethostname()}:{os.getpid()}"
         self.mediawiki = MediaWikiClient(
-            self.settings.user_agent, self.settings.request_timeout_seconds
+            self.settings.user_agent,
+            self.settings.request_timeout_seconds,
+            runtime.resolver,
         )
         self.wikiwho = WikiWhoClient(
             self.settings.wikiwho_base_url,
             self.settings.user_agent,
             self.settings.wikiwho_timeout_seconds,
             self.settings.wikiwho_max_response_bytes,
+            runtime.resolver,
         )
         self.stopping = False
 
@@ -128,6 +131,11 @@ class Worker:
             }
         )
         self.repository.complete(lease.id)
+        if self.repository.register_active_wiki(lease.wiki):
+            LOGGER.info(
+                "discovered wiki=%s; its popular pages will be prewarmed from now on",
+                lease.wiki,
+            )
         LOGGER.info(
             "ready wiki=%s page_id=%s revision_id=%s contributors=%s tokens=%s",
             lease.wiki,
