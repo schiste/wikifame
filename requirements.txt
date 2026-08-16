@@ -1,0 +1,4 @@
+# Toolforge Build Service detects Python applications through this file.
+# Installing the local project also installs the runtime dependencies declared
+# in pyproject.toml and makes the src/ package importable by every Procfile command.
+-e .
