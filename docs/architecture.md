@@ -91,6 +91,6 @@ short retention and must never be repurposed as reader profiles.
   the time of every historical edit.
 - `Base.metadata.create_all()` creates a fresh schema but is not a migration framework. Introduce
   versioned migrations before changing a database that already contains production data.
-- `France` remains a deliberate gadget-only fixture and bypasses Toolforge until it is removed.
+- The gadget has no page-specific fixture; every article uses revision-specific Toolforge data.
 - Toolforge is the prototype host. A default gadget for all readers requires a Wikimedia-scale
   request path and privacy review.

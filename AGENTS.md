@@ -18,7 +18,7 @@ historical contributor count to page history. Toolforge is the prototype backend
 - A breaking API change requires a new version rather than silently changing `/v1`.
 - Do not store raw WikiWho token responses; retain only compact aggregate results.
 - Do not commit secrets, Toolforge account files, database URLs, dumps, or `.env`.
-- Keep the `France` fixture unless the user explicitly asks to remove or replace it.
+- Keep the gadget backed exclusively by the Toolforge API; do not add production-page fixtures.
 
 ## Repository map
 

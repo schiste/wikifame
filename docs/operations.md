@@ -149,5 +149,5 @@ to test restoration before a migration.
 - Review Toolforge variables, job status, database name/size, and last backup.
 - Share the WikiWho contact history and any agreed request-rate limits.
 - Identify the on-wiki personal script/gadget pages and interface-administrator contacts.
-- Review open incidents, dead queue reasons, algorithm version, and current fixture status.
+- Review open incidents, dead queue reasons, algorithm version, and current gadget behavior.
 - Rotate credentials that were personally controlled.

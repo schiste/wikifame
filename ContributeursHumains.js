@@ -7,18 +7,7 @@
 	var CACHE_VERSION = 'v2';
 	var TOOLFORGE_API_BASE = 'https://wikifame.toolforge.org';
 	var REQUEST_TIMEOUT_MS = 8000;
-	var CONTRIBUTION_FIXTURES = {
-		France: {
-			fixture: true,
-			humanCount: 6,
-			limited: false,
-			topEditors: [
-				{ username: 'Victor Hugo' },
-				{ username: 'Jean de la Fontaine' },
-				{ username: 'Racine' }
-			]
-		}
-	};
+	var PENDING_RETRY_DELAYS_MS = [ 3000, 10000 ];
 	var numberFormatter = new Intl.NumberFormat( 'fr-FR' );
 	var percentageFormatter = new Intl.NumberFormat( 'fr-FR', {
 		maximumFractionDigits: 1,
@@ -122,7 +111,6 @@
 
 	async function addArticleSummary() {
 		var cacheKey = getCacheKey();
-		var fixture = getContributionFixture();
 		var cached = readCache( cacheKey );
 		var data;
 		var summary;
@@ -132,8 +120,11 @@
 		}
 
 		try {
-			data = fixture || cached || await loadContributionData();
-			if ( !fixture && !cached ) {
+			data = cached || await loadContributionData();
+			if ( !data ) {
+				return;
+			}
+			if ( !cached ) {
 				writeCache( cacheKey, data );
 			}
 			summary = buildArticleSummary( data );
@@ -145,27 +136,43 @@
 		}
 	}
 
-	function getContributionFixture() {
-		return CONTRIBUTION_FIXTURES[ config.wgPageName ] || null;
-	}
-
 	async function loadContributionData() {
 		var url = TOOLFORGE_API_BASE + '/v1/frwiki/pages/' +
 			encodeURIComponent( config.wgArticleId ) +
 			'?revision_id=' + encodeURIComponent( config.wgCurRevisionId );
-		var data = await fetchJson( url, {
-			credentials: 'omit',
-			referrerPolicy: 'no-referrer'
-		} );
+		var attempt;
+		var data;
 
-		if (
-			data.status !== 'ready' ||
-			typeof data.distinct_contributors !== 'number' ||
-			!Array.isArray( data.contributors )
-		) {
-			throw new Error( 'Attribution en cours de calcul.' );
+		for ( attempt = 0; attempt <= PENDING_RETRY_DELAYS_MS.length; attempt++ ) {
+			data = await fetchJson( url, {
+				credentials: 'omit',
+				referrerPolicy: 'no-referrer'
+			} );
+
+			if ( data.status === 'ready' ) {
+				if (
+					typeof data.distinct_contributors !== 'number' ||
+					!Array.isArray( data.contributors )
+				) {
+					throw new Error( 'Réponse d’attribution invalide.' );
+				}
+
+				return normalizeContributionData( data );
+			}
+
+			if ( data.status !== 'pending' ) {
+				throw new Error( 'État d’attribution inconnu.' );
+			}
+
+			if ( attempt < PENDING_RETRY_DELAYS_MS.length ) {
+				await wait( PENDING_RETRY_DELAYS_MS[ attempt ] );
+			}
 		}
 
+		return null;
+	}
+
+	function normalizeContributionData( data ) {
 		return {
 			humanCount: data.distinct_contributors,
 			limited: Boolean( data.count_limited ),
@@ -176,6 +183,12 @@
 				};
 			} )
 		};
+	}
+
+	function wait( delayMs ) {
+		return new Promise( function ( resolve ) {
+			window.setTimeout( resolve, delayMs );
+		} );
 	}
 
 	async function fetchJson( url, options ) {
@@ -215,9 +228,7 @@
 		box.id = ARTICLE_SUMMARY_ID;
 		box.className = 'contributeurs-humains contributeurs-humains--article';
 		box.setAttribute( 'role', 'note' );
-		box.title = data.fixture ?
-			'Données de démonstration pour le prototype.' :
-			'Principaux contributeurs du texte actuellement visible, selon WikiWho.';
+		box.title = 'Principaux contributeurs du texte actuellement visible, selon WikiWho.';
 
 		box.append( document.createTextNode( 'Article rédigé par ' ) );
 
