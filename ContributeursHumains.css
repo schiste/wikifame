@@ -1,0 +1,27 @@
+.contributeurs-humains {
+	box-sizing: border-box;
+	margin: 0.35rem 0 0.9rem;
+	color: var(--color-subtle, #54595d);
+	font-size: 0.875rem;
+	line-height: 1.5;
+}
+
+.contributeurs-humains--article a {
+	font-weight: 600;
+}
+
+.contributeurs-humains--historique {
+	padding: 0.65rem 0.9rem;
+	border: 1px solid var(--border-color-base, #a2a9b1);
+	background: var(--background-color-neutral-subtle, #f8f9fa);
+}
+
+.contributeurs-humains--historique p {
+	margin: 0.12rem 0;
+}
+
+@media print {
+	.contributeurs-humains {
+		display: none;
+	}
+}
