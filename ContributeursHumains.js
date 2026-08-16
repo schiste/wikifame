@@ -4,14 +4,20 @@
 
 	var ARTICLE_SUMMARY_ID = 'contributeurs-humains-resume';
 	var HISTORY_INTRO_ID = 'contributeurs-humains-historique';
-	var CACHE_VERSION = 'v2';
+	var CACHE_VERSION = 'v3';
 	var TOOLFORGE_API_BASE = 'https://wikifame.toolforge.org';
 	var REQUEST_TIMEOUT_MS = 8000;
+	var CLIENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 	var PENDING_RETRY_DELAYS_MS = [ 3000, 10000 ];
 	var numberFormatter = new Intl.NumberFormat( 'fr-FR' );
 	var percentageFormatter = new Intl.NumberFormat( 'fr-FR', {
 		maximumFractionDigits: 1,
 		style: 'percent'
+	} );
+	var dateFormatter = new Intl.DateTimeFormat( 'fr-FR', {
+		day: 'numeric',
+		month: 'long',
+		year: 'numeric'
 	} );
 	var config = mw.config.get( [
 		'wgAction',
@@ -137,7 +143,7 @@
 	}
 
 	async function loadContributionData() {
-		var url = TOOLFORGE_API_BASE + '/v1/frwiki/pages/' +
+		var url = TOOLFORGE_API_BASE + '/v2/frwiki/pages/' +
 			encodeURIComponent( config.wgArticleId ) +
 			'?revision_id=' + encodeURIComponent( config.wgCurRevisionId );
 		var attempt;
@@ -174,6 +180,7 @@
 
 	function normalizeContributionData( data ) {
 		return {
+			computedAt: data.computed_at,
 			humanCount: data.distinct_contributors,
 			limited: Boolean( data.count_limited ),
 			topEditors: data.contributors.slice( 0, 3 ).map( function ( editor ) {
@@ -220,6 +227,7 @@
 		var box = document.createElement( 'div' );
 		var topEditors = data.topEditors;
 		var otherCount = Math.max( 0, data.humanCount - topEditors.length );
+		var computedDate = new Date( data.computedAt );
 
 		if ( data.humanCount < 1 ) {
 			return null;
@@ -228,7 +236,10 @@
 		box.id = ARTICLE_SUMMARY_ID;
 		box.className = 'contributeurs-humains contributeurs-humains--article';
 		box.setAttribute( 'role', 'note' );
-		box.title = 'Principaux contributeurs du texte actuellement visible, selon WikiWho.';
+		box.title = 'Principaux contributeurs du texte selon WikiWho.';
+		if ( !Number.isNaN( computedDate.getTime() ) ) {
+			box.title += ' Données calculées le ' + dateFormatter.format( computedDate ) + '.';
+		}
 
 		box.append( document.createTextNode( 'Article rédigé par ' ) );
 
@@ -298,15 +309,25 @@
 
 	function getCacheKey() {
 		return 'contributeurs-humains:' + CACHE_VERSION + ':' +
-			config.wgArticleId + ':' + config.wgCurRevisionId;
+			config.wgArticleId;
 	}
 
 	function readCache( key ) {
 		var raw;
+		var cached;
 
 		try {
 			raw = window.sessionStorage.getItem( key );
-			return raw ? JSON.parse( raw ) : null;
+			cached = raw ? JSON.parse( raw ) : null;
+			if (
+				!cached ||
+				typeof cached.storedAt !== 'number' ||
+				Date.now() - cached.storedAt > CLIENT_CACHE_MAX_AGE_MS
+			) {
+				window.sessionStorage.removeItem( key );
+				return null;
+			}
+			return cached.data || null;
 		} catch ( error ) {
 			return null;
 		}
@@ -314,7 +335,10 @@
 
 	function writeCache( key, data ) {
 		try {
-			window.sessionStorage.setItem( key, JSON.stringify( data ) );
+			window.sessionStorage.setItem( key, JSON.stringify( {
+				data: data,
+				storedAt: Date.now()
+			} ) );
 		} catch ( error ) {
 			// Le gadget reste fonctionnel lorsque le stockage est désactivé ou plein.
 		}
