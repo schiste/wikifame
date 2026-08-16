@@ -10,6 +10,9 @@ API version for breaking changes.
 GET /v2/{wiki}/pages/{page_id}?revision_id={revision_id}
 ```
 
+`{wiki}` is a Wikipedia database name such as `frwiki`, `enwiki`, or `simplewiki`. Any Wikipedia
+WikiWho covers is accepted by default; see [wiki scope](#wiki-scope) below.
+
 The gadget sends the current revision so a refresh job knows what to calculate. A ready result is
 selected by `(wiki, page_id, algorithm_version)`, not by exact requested revision. This lets one
 calculation remain usable across ordinary edits for `PAGE_FRESHNESS_SECONDS`, 90 days by default.
@@ -68,9 +71,9 @@ current visit and otherwise waits for a later page view.
 GET /v1/{wiki}/pages/{page_id}?revision_id={revision_id}
 ```
 
-Initial scope:
+Scope:
 
-- `wiki`: `frwiki`
+- `wiki`: database name of a WikiWho-covered Wikipedia
 - `page_id`: positive MediaWiki page ID
 - `revision_id`: positive current revision ID
 
@@ -148,16 +151,40 @@ and does not poll continuously. A later page visit can consume the ready result.
 Transient dead jobs become eligible again after `DEAD_RETRY_SECONDS`. Permanent data errors stay
 unavailable for that algorithm version.
 
+## Wiki scope
+
+Both versions accept the same wikis. A wiki qualifies when it is a Wikipedia WikiWho analyses —
+`{lang}wiki` where `{lang}` is a covered language code — and when `SUPPORTED_WIKIS` enables it.
+`SUPPORTED_WIKIS` defaults to `*`, so no configuration is needed to serve a new Wikipedia.
+
+Anything else, including `commonswiki`, `wikidatawiki`, and every Wiktionary or Wikisource,
+returns:
+
+```http
+HTTP/1.1 404 Not Found
+{ "detail": "Wiki non pris en charge" }
+```
+
+`404` is a normal, expected answer rather than an error condition: the gadget ships unchanged on
+every wiki and simply renders nothing where the API declines. This lets operators enable wikis
+progressively without any on-wiki script edit.
+
+Being served is not a promise of prewarming. A wiki keeps its popular pages warm once it has
+produced at least one real result, or once an operator lists it in `PREWARM_WIKIS`.
+
 ## Operational endpoints
 
 - `GET /healthz`: database connectivity probe; returns `{"status":"ok"}`.
-- `GET /v1/stats`: aggregate ready and queue counts. Do not scrape at high frequency because an
-  exact result count can become expensive on a large InnoDB table.
+- `GET /v1/stats`: aggregate ready and queue counts, plus `supported_wikis` (the configured
+  enablement, `["*"]` by default) and `active_wikis` (wikis that have produced a result and are
+  therefore prewarmed). Do not scrape at high frequency because an exact result count can become
+  expensive on a large InnoDB table.
 - `GET /docs`: generated OpenAPI interface. This documents HTTP structure, while this file
   documents behavioral guarantees.
 
 ## CORS and privacy
 
-CORS permits the configured French Wikipedia origins. CORS is not authentication; scripted
-clients can still call the public API. Responses contain no reader data. Operational access logs
+CORS permits Wikipedia origins, desktop and mobile, through `CORS_ORIGIN_REGEX`; `CORS_ORIGINS`
+adds exact origins on top. CORS is not authentication; scripted clients can still call the public
+API, and that was equally true when a single origin was allowed. Responses contain no reader data. Operational access logs
 must not be used to reconstruct reading histories.

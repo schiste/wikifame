@@ -181,3 +181,48 @@ def test_v2_returns_pending_when_page_has_never_been_calculated(tmp_path: Path) 
         assert pending.headers["cache-control"] == "no-store"
         assert pending.json()["requested_revision_id"] == 200
         assert runtime.repository.get_work("frwiki", 100, 200, "test-v2") is not None
+
+
+def test_any_wikiwho_covered_wikipedia_is_served_without_configuration(tmp_path: Path) -> None:
+    """SUPPORTED_WIKIS=* means a reader on any covered Wikipedia gets an answer."""
+    settings = replace(
+        Settings.from_env(),
+        database_url=f"sqlite:///{tmp_path / 'universal.db'}",
+        algorithm_version="test-v1",
+        supported_wikis=("*",),
+    )
+    app = create_app(build_runtime(settings))
+
+    with TestClient(app) as client:
+        for wiki in ("frwiki", "dewiki", "jawiki", "simplewiki"):
+            response = client.get(f"/v2/{wiki}/pages/100?revision_id=200")
+            assert response.status_code == 202, wiki
+            assert response.json()["wiki"] == wiki
+
+
+def test_projects_without_wikiwho_coverage_are_refused(tmp_path: Path) -> None:
+    settings = replace(
+        Settings.from_env(),
+        database_url=f"sqlite:///{tmp_path / 'refused.db'}",
+        algorithm_version="test-v1",
+        supported_wikis=("*",),
+    )
+    app = create_app(build_runtime(settings))
+
+    with TestClient(app) as client:
+        for wiki in ("commonswiki", "wikidatawiki", "frwiktionary"):
+            assert client.get(f"/v2/{wiki}/pages/100?revision_id=200").status_code == 404, wiki
+
+
+def test_explicit_allowlist_still_narrows_serving(tmp_path: Path) -> None:
+    settings = replace(
+        Settings.from_env(),
+        database_url=f"sqlite:///{tmp_path / 'allowlist.db'}",
+        algorithm_version="test-v1",
+        supported_wikis=("frwiki",),
+    )
+    app = create_app(build_runtime(settings))
+
+    with TestClient(app) as client:
+        assert client.get("/v2/frwiki/pages/100?revision_id=200").status_code == 202
+        assert client.get("/v2/dewiki/pages/100?revision_id=200").status_code == 404

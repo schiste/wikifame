@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from functools import lru_cache
 from urllib.parse import quote_plus
 
+from wikifame.sites import ALL_WIKIS, DEFAULT_WIKIWHO_LANGUAGES
+
 
 def _csv(value: str) -> tuple[str, ...]:
     return tuple(item.strip() for item in value.split(",") if item.strip())
@@ -33,7 +35,11 @@ class Settings:
     user_agent: str
     algorithm_version: str
     supported_wikis: tuple[str, ...]
+    prewarm_wikis: tuple[str, ...]
+    backfill_wikis: tuple[str, ...]
+    wikiwho_languages: frozenset[str]
     cors_origins: tuple[str, ...]
+    cors_origin_regex: str
     wikiwho_base_url: str
     request_timeout_seconds: float
     wikiwho_timeout_seconds: float
@@ -60,12 +66,20 @@ class Settings:
                 "WikiFame/0.1 (https://github.com/schiste/wikifame)",
             ),
             algorithm_version=os.getenv("ALGORITHM_VERSION", "surviving-tokens-v1"),
-            supported_wikis=_csv(os.getenv("SUPPORTED_WIKIS", "frwiki")),
-            cors_origins=_csv(
-                os.getenv(
-                    "CORS_ORIGINS",
-                    "https://fr.wikipedia.org,https://fr.m.wikipedia.org",
-                )
+            # "*" serves every wiki WikiWho covers, on demand. Scheduled bulk work is
+            # opted into separately so universal serving cannot imply universal crawling.
+            supported_wikis=_csv(os.getenv("SUPPORTED_WIKIS", ALL_WIKIS)),
+            prewarm_wikis=_csv(os.getenv("PREWARM_WIKIS", "")),
+            backfill_wikis=_csv(os.getenv("BACKFILL_WIKIS", "")),
+            wikiwho_languages=(
+                frozenset(_csv(os.environ["WIKIWHO_LANGUAGES"]))
+                if os.getenv("WIKIWHO_LANGUAGES")
+                else DEFAULT_WIKIWHO_LANGUAGES
+            ),
+            cors_origins=_csv(os.getenv("CORS_ORIGINS", "")),
+            cors_origin_regex=os.getenv(
+                "CORS_ORIGIN_REGEX",
+                r"^https://[a-z0-9-]+\.(?:m\.)?wikipedia\.org$",
             ),
             wikiwho_base_url=os.getenv(
                 "WIKIWHO_BASE_URL", "https://wikiwho-api.wmcloud.org"

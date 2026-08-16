@@ -12,13 +12,7 @@ import httpx
 
 from wikifame.errors import PermanentDataError, ResponseTooLargeError, RetryableUpstreamError
 from wikifame.policy import ResolvedUser
-
-WIKI_HOSTS = {
-    "frwiki": "fr.wikipedia.org",
-}
-WIKIWHO_LANGUAGES = {
-    "frwiki": "fr",
-}
+from wikifame.sites import SiteResolver
 
 
 @dataclass(frozen=True)
@@ -42,19 +36,21 @@ def _batched(values: Iterable[int], size: int) -> Iterable[list[int]]:
 
 
 class MediaWikiClient:
-    def __init__(self, user_agent: str, timeout_seconds: float) -> None:
+    def __init__(
+        self,
+        user_agent: str,
+        timeout_seconds: float,
+        resolver: SiteResolver | None = None,
+    ) -> None:
+        self.resolver = resolver or SiteResolver()
         self.client = httpx.Client(
             headers={"User-Agent": user_agent, "Accept": "application/json"},
             timeout=timeout_seconds,
             follow_redirects=True,
         )
 
-    @staticmethod
-    def host(wiki: str) -> str:
-        try:
-            return WIKI_HOSTS[wiki]
-        except KeyError as error:
-            raise PermanentDataError(f"Wiki non pris en charge : {wiki}") from error
+    def host(self, wiki: str) -> str:
+        return self.resolver.host(wiki)
 
     def _action(self, wiki: str, params: dict[str, Any]) -> dict[str, Any]:
         try:
@@ -221,9 +217,11 @@ class WikiWhoClient:
         user_agent: str,
         timeout_seconds: float,
         max_response_bytes: int,
+        resolver: SiteResolver | None = None,
     ) -> None:
         self.base_url = base_url
         self.max_response_bytes = max_response_bytes
+        self.resolver = resolver or SiteResolver()
         self.client = httpx.Client(
             headers={"User-Agent": user_agent, "Accept": "application/json"},
             timeout=timeout_seconds,
@@ -231,10 +229,7 @@ class WikiWhoClient:
         )
 
     def fetch_revision(self, wiki: str, revision_id: int) -> list[dict[str, Any]]:
-        try:
-            language = WIKIWHO_LANGUAGES[wiki]
-        except KeyError as error:
-            raise PermanentDataError(f"WikiWho ne prend pas en charge {wiki}") from error
+        language = self.resolver.require_language(wiki)
         url = f"{self.base_url}/{language}/api/v1.0.0-beta/rev_content/rev_id/{revision_id}/"
         params = {
             "o_rev_id": "false",
@@ -278,7 +273,13 @@ class WikiWhoClient:
 
 
 class AnalyticsClient:
-    def __init__(self, user_agent: str, timeout_seconds: float) -> None:
+    def __init__(
+        self,
+        user_agent: str,
+        timeout_seconds: float,
+        resolver: SiteResolver | None = None,
+    ) -> None:
+        self.resolver = resolver or SiteResolver()
         self.client = httpx.Client(
             headers={"User-Agent": user_agent, "Accept": "application/json"},
             timeout=timeout_seconds,
@@ -286,7 +287,7 @@ class AnalyticsClient:
         )
 
     def top_pages(self, wiki: str, day: date) -> list[str] | None:
-        host = WIKI_HOSTS[wiki]
+        host = self.resolver.host(wiki)
         url = (
             "https://wikimedia.org/api/rest_v1/metrics/pageviews/top/"
             f"{host}/all-access/{day:%Y/%m/%d}"

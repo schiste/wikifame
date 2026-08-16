@@ -35,6 +35,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(app_runtime.settings.cors_origins),
+        allow_origin_regex=app_runtime.settings.cors_origin_regex or None,
         allow_methods=["GET"],
         allow_headers=["Accept"],
         max_age=86400,
@@ -50,6 +51,8 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         return {
             "status": "ok",
             "algorithm_version": app_runtime.settings.algorithm_version,
+            "supported_wikis": list(app_runtime.settings.supported_wikis),
+            "active_wikis": app_runtime.repository.active_wikis(),
             "cache": app_runtime.repository.stats(),
         }
 
@@ -61,7 +64,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         revision_id: int = Query(gt=0),
     ) -> Any:
         settings = app_runtime.settings
-        if wiki not in settings.supported_wikis:
+        if not app_runtime.resolver.is_enabled(wiki, settings.supported_wikis):
             raise HTTPException(status_code=404, detail="Wiki non pris en charge")
         if page_id <= 0:
             raise HTTPException(status_code=422, detail="page_id doit être positif")
@@ -139,7 +142,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         revision_id: int = Query(gt=0),
     ) -> Any:
         settings = app_runtime.settings
-        if wiki not in settings.supported_wikis:
+        if not app_runtime.resolver.is_enabled(wiki, settings.supported_wikis):
             raise HTTPException(status_code=404, detail="Wiki non pris en charge")
         if page_id <= 0:
             raise HTTPException(status_code=422, detail="page_id doit être positif")
