@@ -9,7 +9,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 
 from wikifame.db import Database
-from wikifame.models import AppState, AttributionResult, WorkItem, utcnow
+from wikifame.models import ActiveWiki, AppState, AttributionResult, WorkItem, utcnow
 
 
 @dataclass(frozen=True)
@@ -281,6 +281,32 @@ class Repository:
                     updated_at=utcnow(),
                 )
             )
+
+    def register_active_wiki(self, wiki: str) -> bool:
+        """Record that a wiki has produced a result. Returns True on first sighting.
+
+        A unique primary key makes concurrent workers safe: the loser of the race
+        simply refreshes the timestamp.
+        """
+        now = utcnow()
+        try:
+            with self.database.session() as session, session.begin():
+                existing = session.get(ActiveWiki, wiki)
+                if existing is not None:
+                    existing.last_result_at = now
+                    return False
+                session.add(ActiveWiki(wiki=wiki, first_seen_at=now, last_result_at=now))
+                return True
+        except IntegrityError:
+            with self.database.session() as session, session.begin():
+                session.execute(
+                    update(ActiveWiki).where(ActiveWiki.wiki == wiki).values(last_result_at=now)
+                )
+            return False
+
+    def active_wikis(self) -> list[str]:
+        with self.database.session() as session:
+            return sorted(session.scalars(select(ActiveWiki.wiki)).all())
 
     def get_state(self, key: str) -> str | None:
         with self.database.session() as session:

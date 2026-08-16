@@ -90,6 +90,25 @@ class WorkItem(Base):
     )
 
 
+class ActiveWiki(Base):
+    """A wiki that has produced at least one real result.
+
+    Workers register a wiki here the first time they store a result for it. The
+    daily prewarm job reads this table, so a wiki discovered through genuine reader
+    demand starts keeping its own top-1000 warm without any configuration change.
+    Registration is deliberately driven by a completed calculation rather than by an
+    API request, so scripted traffic cannot enrol wikis into scheduled work.
+    """
+
+    __tablename__ = "active_wikis"
+
+    wiki: Mapped[str] = mapped_column(String(64), primary_key=True)
+    first_seen_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+    last_result_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=utcnow, onupdate=utcnow
+    )
+
+
 class AppState(Base):
     __tablename__ = "app_state"
 
