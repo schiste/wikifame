@@ -8,7 +8,7 @@ python -m venv .venv
 .venv/bin/pytest
 .venv/bin/ruff check src tests
 .venv/bin/ruff format --check src tests
-node --check ContributeursHumains.js
+node --check wikifame.js
 ```
 
 SQLite is the default local database. Production uses MariaDB/ToolsDB through `DATABASE_URL`.

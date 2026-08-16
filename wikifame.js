@@ -2,9 +2,9 @@
 ( function () {
 	'use strict';
 
-	var ARTICLE_SUMMARY_ID = 'contributeurs-humains-resume';
-	var HISTORY_INTRO_ID = 'contributeurs-humains-historique';
-	var CACHE_VERSION = 'v3';
+	var ARTICLE_SUMMARY_ID = 'wikifame-summary';
+	var HISTORY_INTRO_ID = 'wikifame-history-intro';
+	var CACHE_VERSION = 'v1';
 	var TOOLFORGE_API_BASE = 'https://wikifame.toolforge.org';
 	var REQUEST_TIMEOUT_MS = 8000;
 	var CLIENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
@@ -49,7 +49,7 @@
 			addArticleSummary();
 		}
 	} ).catch( function ( error ) {
-		mw.log.error( 'ContributeursHumains : initialisation impossible', error );
+		mw.log.error( 'WikiFame : initialisation impossible', error );
 	} );
 
 	function insertBelowSubtitle( element ) {
@@ -87,7 +87,7 @@
 
 		box = document.createElement( 'div' );
 		box.id = HISTORY_INTRO_ID;
-		box.className = 'contributeurs-humains contributeurs-humains--historique';
+		box.className = 'wikifame wikifame--history';
 		box.setAttribute( 'role', 'note' );
 
 		line1 = document.createElement( 'p' );
@@ -138,7 +138,7 @@
 				insertBelowSubtitle( summary );
 			}
 		} catch ( error ) {
-			mw.log.warn( 'ContributeursHumains : données indisponibles', error );
+			mw.log.warn( 'WikiFame : données indisponibles', error );
 		}
 	}
 
@@ -234,7 +234,7 @@
 		}
 
 		box.id = ARTICLE_SUMMARY_ID;
-		box.className = 'contributeurs-humains contributeurs-humains--article';
+		box.className = 'wikifame wikifame--article';
 		box.setAttribute( 'role', 'note' );
 		box.title = 'Principaux contributeurs du texte selon WikiWho.';
 		if ( !Number.isNaN( computedDate.getTime() ) ) {
@@ -308,7 +308,7 @@
 	}
 
 	function getCacheKey() {
-		return 'contributeurs-humains:' + CACHE_VERSION + ':' +
+		return 'wikifame:' + CACHE_VERSION + ':' +
 			config.wgArticleId;
 	}
 

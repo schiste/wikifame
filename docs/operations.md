@@ -15,6 +15,10 @@ Before production use, ensure at least two maintainers have:
 
 Update `WIKIFAME_USER_AGENT` whenever the operational contact changes.
 
+The personal-script prototype uses `Utilisateur:NAME/wikifame.js` and
+`Utilisateur:NAME/wikifame.css`. Its `common.js` must not simultaneously import the former
+`ContributeursHumains` filenames.
+
 ## External dependencies
 
 | Dependency | Purpose | Failure behavior |
@@ -30,7 +34,7 @@ The API web process never calls these upstream services. Only workers and schedu
 ## First deployment
 
 1. Create or join the Toolforge tool. If its name is not `wikifame`, update the image names in
-   `jobs.yaml` and `TOOLFORGE_API_BASE` in `ContributeursHumains.js`.
+   `jobs.yaml` and `TOOLFORGE_API_BASE` in `wikifame.js`.
 2. Create the ToolsDB database named `${TOOL_TOOLSDB_USER}__wikifame` using the credential-user
    prefix required by Toolforge. The application automatically consumes Toolforge's injected
    `TOOL_TOOLSDB_USER` and `TOOL_TOOLSDB_PASSWORD`; do not copy those secrets into the repository.

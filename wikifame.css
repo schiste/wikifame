@@ -1,4 +1,4 @@
-.contributeurs-humains {
+.wikifame {
 	box-sizing: border-box;
 	margin: 0.35rem 0 0.9rem;
 	color: var(--color-subtle, #54595d);
@@ -6,22 +6,22 @@
 	line-height: 1.5;
 }
 
-.contributeurs-humains--article a {
+.wikifame--article a {
 	font-weight: 600;
 }
 
-.contributeurs-humains--historique {
+.wikifame--history {
 	padding: 0.65rem 0.9rem;
 	border: 1px solid var(--border-color-base, #a2a9b1);
 	background: var(--background-color-neutral-subtle, #f8f9fa);
 }
 
-.contributeurs-humains--historique p {
+.wikifame--history p {
 	margin: 0.12rem 0;
 }
 
 @media print {
-	.contributeurs-humains {
+	.wikifame {
 		display: none;
 	}
 }

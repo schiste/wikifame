@@ -28,7 +28,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
     app = FastAPI(
         title="WikiFame API",
         version="0.1.0",
-        description="Cached WikiWho attribution for the ContributeursHumains gadget",
+        description="Cached WikiWho attribution for the WikiFame gadget",
         lifespan=lifespan,
     )
     app.state.runtime = app_runtime

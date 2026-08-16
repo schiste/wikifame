@@ -23,7 +23,7 @@ historical contributor count to page history. Toolforge is the prototype backend
 
 ## Repository map
 
-- `ContributeursHumains.js`, `.css`: MediaWiki gadget/personal script.
+- `wikifame.js`, `.css`: MediaWiki gadget/personal script.
 - `src/wikifame/app.py`: cache-only HTTP API.
 - `src/wikifame/worker.py`: asynchronous calculation orchestration.
 - `src/wikifame/clients.py`: all external HTTP calls.
@@ -40,7 +40,7 @@ historical contributor count to page history. Toolforge is the prototype backend
 .venv/bin/pytest
 .venv/bin/ruff check src tests
 .venv/bin/ruff format --check src tests
-node --check ContributeursHumains.js
+node --check wikifame.js
 git diff --check
 ```
 

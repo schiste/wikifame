@@ -14,7 +14,7 @@ and their daughter**. This project turns their family idea into an open Wikimedi
 
 ## Components
 
-- `ContributeursHumains.js` and `ContributeursHumains.css`: personal-script prototype.
+- `wikifame.js` and `wikifame.css`: personal-script prototype.
 - `src/wikifame/app.py`: read-only FastAPI service for the gadget.
 - `src/wikifame/worker.py`: durable WikiWho calculation worker.
 - `src/wikifame/prewarm.py`: preloads popular articles from Wikimedia pageviews.
@@ -69,6 +69,23 @@ Run the test suite:
 ```bash
 .venv/bin/pytest
 ```
+
+## Personal-script installation
+
+Copy the repository files to these pages on French Wikipedia:
+
+- `Utilisateur:YOUR_USERNAME/wikifame.js`
+- `Utilisateur:YOUR_USERNAME/wikifame.css`
+
+Then load them from `Utilisateur:YOUR_USERNAME/common.js`:
+
+```javascript
+importScript( 'Utilisateur:YOUR_USERNAME/wikifame.js' );
+importStylesheet( 'Utilisateur:YOUR_USERNAME/wikifame.css' );
+```
+
+Do not load the previous `ContributeursHumains` pages at the same time: both scripts would request
+the same attribution and attempt to render a summary.
 
 ## Toolforge deployment
 
