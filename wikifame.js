@@ -15,6 +15,15 @@
  *
  * When this becomes a site-wide gadget the page moves to MediaWiki:Wikifame-config.json
  * and only CONFIG_PAGE_SUFFIX and configPage() change.
+ *
+ * Two extension points exist so that nobody has to fork this file:
+ *
+ *   historyIntroPage  a wikitext page whose parsed HTML replaces the built-in history
+ *                     introduction. Images, galleries, Commons video and templates all
+ *                     work, because MediaWiki does the parsing and the sanitising.
+ *   mw.hook           'wikifame.history' and 'wikifame.summary' fire with the rendered
+ *                     element, so arbitrary JavaScript belongs in the reader's own
+ *                     common.js rather than in a configuration page.
  */
 ( function () {
 	'use strict';
@@ -27,6 +36,7 @@
 	var REQUEST_TIMEOUT_MS = 8000;
 	var CLIENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 	var CONFIG_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+	var CONTENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 	var PENDING_RETRY_DELAYS_MS = [ 3000, 10000 ];
 
 	var DEFAULT_CONFIG = {
@@ -34,6 +44,7 @@
 		showHistoryIntro: true,
 		editHelpPage: null,
 		sandboxPage: null,
+		historyIntroPage: null,
 		messages: {}
 	};
 
@@ -114,7 +125,7 @@
 
 			if ( config.wgAction === 'history' ) {
 				if ( wikiConfig.showHistoryIntro !== false ) {
-					addHistoryIntroduction( wikiConfig );
+					return addHistoryIntroduction( wikiConfig );
 				}
 				return;
 			}
@@ -191,6 +202,141 @@
 
 		writeCache( cacheKey, parsed );
 		return Object.assign( {}, DEFAULT_CONFIG, parsed );
+	}
+
+	/* ------------------------------------------------------------- custom content */
+
+	/**
+	 * Titles to try for a reader's own rich content, most specific first.
+	 *
+	 * A wikitext page is written in one language, so translations live on language
+	 * subpages: /fr-ca, then /fr, then the base title. That keeps one reviewable page
+	 * per language instead of one page in whichever language its author happened to
+	 * speak, which is the problem the flat "messages" object has.
+	 */
+	function contentCandidates( base ) {
+		var language = config.wgUserLanguage || 'en';
+		var candidates = [ base + '/' + language ];
+
+		if ( language.indexOf( '-' ) !== -1 ) {
+			candidates.push( base + '/' + language.split( '-' )[ 0 ] );
+		}
+		candidates.push( base );
+		return candidates;
+	}
+
+	/**
+	 * Parsed HTML for one title, or null when it does not exist.
+	 *
+	 * Anonymous so the response stays CDN-cacheable, and asks for a short server-side
+	 * cache: an introduction changes rarely but is read on every history view.
+	 */
+	async function fetchParsedPage( title ) {
+		var url = mw.util.wikiScript( 'api' ) +
+			'?action=parse&format=json&formatversion=2&prop=text' +
+			'&redirects=1&disablelimitreport=1&disableeditsection=1' +
+			'&smaxage=300&maxage=300' +
+			'&page=' + encodeURIComponent( title );
+		var response;
+		var data;
+
+		try {
+			response = await fetch( url, {
+				headers: { Accept: 'application/json' },
+				credentials: 'omit'
+			} );
+			if ( !response.ok ) {
+				return null;
+			}
+			data = await response.json();
+		} catch ( error ) {
+			return null;
+		}
+
+		// A missing page reports an error code rather than an HTTP status, and is the
+		// normal case for a reader who has not written one.
+		if ( !data || !data.parse || typeof data.parse.text !== 'string' ) {
+			return null;
+		}
+		return data.parse.text;
+	}
+
+	/**
+	 * Rich introduction for this reader, already parsed by MediaWiki, or null.
+	 *
+	 * Wikitext buys images, galleries, Commons video and templates for nothing, and the
+	 * parser sanitises it, so this script never has to build markup from a string or
+	 * trust the page to be well-behaved.
+	 */
+	async function loadCustomContent( title ) {
+		var cacheKey;
+		var cached;
+		var candidates;
+		var index;
+		var html = null;
+
+		if ( typeof title !== 'string' || !title ) {
+			return null;
+		}
+
+		cacheKey = 'wikifame:content:' + CACHE_VERSION + ':' + config.wgDBname + ':' +
+			title + ':' + ( config.wgUserLanguage || 'en' );
+		cached = readCache( cacheKey, CONTENT_CACHE_MAX_AGE_MS );
+
+		if ( cached ) {
+			return cached.html;
+		}
+
+		candidates = contentCandidates( title );
+
+		for ( index = 0; index < candidates.length && !html; index++ ) {
+			html = await fetchParsedPage( candidates[ index ] );
+		}
+
+		// The absence of a page is cached too. Otherwise a configured but unwritten
+		// title costs three failed lookups on every single history view.
+		writeCache( cacheKey, { html: html } );
+		return html;
+	}
+
+	/**
+	 * Turn parser output into nodes.
+	 *
+	 * DOMParser builds an inert document, so nothing loads or runs while the fragment is
+	 * assembled. Wikitext cannot produce a script element in the first place; removing
+	 * any that appear keeps that true of this function on its own, without having to
+	 * reason about the whole parser pipeline to review it.
+	 */
+	function renderCustomContent( html ) {
+		var parsed = new DOMParser().parseFromString( html, 'text/html' );
+		var container = document.createElement( 'div' );
+
+		parsed.querySelectorAll( 'script' ).forEach( function ( node ) {
+			node.remove();
+		} );
+
+		// A note box is not worth blocking a page render for: media loads when reached,
+		// and video never starts on its own in something the reader did not ask to play.
+		parsed.querySelectorAll( 'img' ).forEach( function ( image ) {
+			image.setAttribute( 'loading', 'lazy' );
+		} );
+		parsed.querySelectorAll( 'video' ).forEach( function ( video ) {
+			video.removeAttribute( 'autoplay' );
+			video.setAttribute( 'preload', 'none' );
+		} );
+
+		if ( parsed.querySelector( 'video, .mw-tmh-player' ) ) {
+			// Commons video falls back to a bare player without TimedMediaHandler, and
+			// the module is absent on some wikis, so failing to load it is not an error.
+			mw.loader.using( 'ext.tmh.player' ).catch( function () {} );
+		}
+
+		container.className = 'wikifame-custom';
+		container.append.apply(
+			container,
+			Array.prototype.slice.call( parsed.body.childNodes )
+		);
+		return container;
 	}
 
 	function installMessages( wikiConfig ) {
@@ -309,9 +455,10 @@
 		}
 	}
 
-	function addHistoryIntroduction( wikiConfig ) {
+	async function addHistoryIntroduction( wikiConfig ) {
 		var box;
 		var line;
+		var custom;
 
 		if ( document.getElementById( HISTORY_INTRO_ID ) ) {
 			return;
@@ -322,32 +469,42 @@
 		box.className = 'wikifame wikifame--history';
 		box.setAttribute( 'role', 'note' );
 
-		line = document.createElement( 'p' );
-		line.textContent = mw.message( 'wikifame-history-intro' ).text();
-		box.append( line );
+		custom = await loadCustomContent( wikiConfig.historyIntroPage );
 
-		// The help and sandbox pages have no cross-wiki names, so this sentence only
-		// appears where the local configuration page supplies both titles.
-		if ( wikiConfig.editHelpPage && wikiConfig.sandboxPage ) {
+		if ( custom ) {
+			box.append( renderCustomContent( custom ) );
+		} else {
 			line = document.createElement( 'p' );
-			appendMessageWithNodes( line, 'wikifame-history-help', [
-				createWikiLink(
-					wikiConfig.editHelpPage,
-					mw.message( 'wikifame-history-help-label' ).text()
-				),
-				createWikiLink(
-					wikiConfig.sandboxPage,
-					mw.message( 'wikifame-history-sandbox-label' ).text()
-				)
-			] );
+			line.textContent = mw.message( 'wikifame-history-intro' ).text();
 			box.append( line );
+
+			// The help and sandbox pages have no cross-wiki names, so this sentence only
+			// appears where the local configuration page supplies both titles.
+			if ( wikiConfig.editHelpPage && wikiConfig.sandboxPage ) {
+				line = document.createElement( 'p' );
+				appendMessageWithNodes( line, 'wikifame-history-help', [
+					createWikiLink(
+						wikiConfig.editHelpPage,
+						mw.message( 'wikifame-history-help-label' ).text()
+					),
+					createWikiLink(
+						wikiConfig.sandboxPage,
+						mw.message( 'wikifame-history-sandbox-label' ).text()
+					)
+				] );
+				box.append( line );
+			}
 		}
 
+		// Always built here, never in wikitext: a page parsed on its own has no idea
+		// which article the reader is looking at, so {{FULLPAGENAME}} would name the
+		// introduction itself and the link would offer to edit the wrong page.
 		line = document.createElement( 'p' );
 		appendMessageWithNodes( line, 'wikifame-history-edit', [ createEditLink() ] );
 		box.append( line );
 
 		insertBelowSubtitle( box );
+		mw.hook( 'wikifame.history' ).fire( box, wikiConfig );
 	}
 
 	async function addArticleSummary() {
@@ -371,6 +528,7 @@
 			summary = buildArticleSummary( data );
 			if ( summary ) {
 				insertBelowSubtitle( summary );
+				mw.hook( 'wikifame.summary' ).fire( summary, data );
 			}
 		} catch ( error ) {
 			mw.log.warn( 'WikiFame: attribution unavailable', error );

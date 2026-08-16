@@ -26,6 +26,13 @@ that page is `User:<name>/wikifame-config.json`, next to the script itself, whic
 of any rights requirement; a site-wide gadget would move it to `MediaWiki:Wikifame-config.json`. A
 missing page yields the built-in defaults, and per-wiki defaults are published in `config/`.
 
+Customisation beyond settings is deliberately not expressed in that JSON. `historyIntroPage` names
+a wikitext page whose parsed HTML replaces the history-box wording, so images, Commons video, and
+templates work through MediaWiki's own renderer and sanitiser rather than through gadget code; and
+two `mw.hook` events carry arbitrary JavaScript into the reader's `common.js`. Nothing in a
+configuration page is executed or treated as markup, which is what keeps it reviewable by reading
+it. See [ADR-0004](decisions/0004-on-wiki-extensibility.md).
+
 ## Request path
 
 1. The gadget requests `GET /v2/{wiki}/pages/{page_id}?revision_id={revision_id}`.

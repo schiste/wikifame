@@ -73,6 +73,61 @@ def test_config_page_lives_beside_the_script_in_the_readers_own_user_space() -> 
     assert not [line for line in code if "MediaWiki:" in line]
 
 
+def test_custom_content_is_parsed_by_mediawiki_rather_than_built_here() -> None:
+    """Wikitext gives images and video for free, and the parser does the sanitising.
+
+    The gadget must never assemble markup from a configuration string: that is the
+    difference between rich content and an injection point.
+    """
+    body = GADGET_SOURCE.split("function renderCustomContent(", 1)[1].split("\n\t}", 1)[0]
+    assert "DOMParser" in body
+    assert "innerHTML" not in GADGET_SOURCE
+    # Wikitext cannot emit one, but the guarantee should survive reading this function
+    # alone rather than the whole parser pipeline.
+    assert "querySelectorAll( 'script' )" in body
+    # Media in a note box loads when reached and never plays by itself.
+    assert "'loading', 'lazy'" in body
+    assert "removeAttribute( 'autoplay' )" in body
+
+
+def test_custom_content_is_fetched_anonymously_and_falls_back_to_built_in_wording() -> None:
+    fetch = GADGET_SOURCE.split("async function fetchParsedPage(", 1)[1].split("\n\t}", 1)[0]
+    assert "action=parse" in fetch
+    # Anonymous keeps the response CDN-cacheable and reader-independent.
+    assert "credentials: 'omit'" in fetch
+    assert "return null" in fetch
+
+    load = GADGET_SOURCE.split("async function loadCustomContent(", 1)[1].split("\n\t}", 1)[0]
+    # A configured but unwritten page must not cost a lookup on every history view.
+    assert "writeCache( cacheKey, { html: html } )" in load
+
+    intro = GADGET_SOURCE.split("async function addHistoryIntroduction(", 1)[1].split(
+        "\n\tasync function", 1
+    )[0]
+    assert "if ( custom ) {" in intro
+    assert "} else {" in intro
+    # The edit link is built here in every case: a page parsed on its own cannot know
+    # which article the reader is on, so wikitext magic words would name the wrong page.
+    assert "createEditLink()" in intro.split("} else {", 1)[1].split("\n\t\t}", 1)[1]
+
+
+def test_translations_live_on_language_subpages() -> None:
+    """One reviewable page per language, unlike the language-blind messages object."""
+    body = GADGET_SOURCE.split("function contentCandidates(", 1)[1].split("\n\t}", 1)[0]
+    assert "base + '/' + language" in body
+    assert "language.split( '-' )[ 0 ]" in body
+    # The base title is the last resort, not the first choice.
+    assert body.index("candidates.push( base )") > body.index("base + '/' + language")
+
+
+def test_javascript_extension_uses_hooks_instead_of_code_in_configuration() -> None:
+    """Config pages stay declarative; arbitrary JS belongs in the reader's common.js."""
+    assert "mw.hook( 'wikifame.history' ).fire(" in GADGET_SOURCE
+    assert "mw.hook( 'wikifame.summary' ).fire(" in GADGET_SOURCE
+    assert "eval(" not in GADGET_SOURCE
+    assert "new Function" not in GADGET_SOURCE
+
+
 def test_gadget_localises_plurals_and_lists_rather_than_hardcoding_french() -> None:
     assert "PLURAL:" in GADGET_SOURCE
     assert "Intl.ListFormat" in GADGET_SOURCE

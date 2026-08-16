@@ -62,6 +62,7 @@ or practise in …" sentence in the history box is simply left out.
 	"showHistoryIntro": true,
 	"editHelpPage": "Help:Editing",
 	"sandboxPage": "Wikipedia:Sandbox",
+	"historyIntroPage": null,
 	"messages": {}
 }
 ```
@@ -74,6 +75,7 @@ or practise in …" sentence in the history box is simply left out.
 	"showHistoryIntro": true,
 	"editHelpPage": "Aide:Comment modifier une page",
 	"sandboxPage": "Wikipédia:Bac à sable",
+	"historyIntroPage": null,
 	"messages": {}
 }
 ```
@@ -89,6 +91,7 @@ pull request so the next person on that wiki does not have to.
 | `showHistoryIntro` | boolean | `true` | `false` removes the explanatory box on page-history views but keeps the attribution sentence on articles. |
 | `editHelpPage` | string or `null` | `null` | Local title of the editing help page. |
 | `sandboxPage` | string or `null` | `null` | Local title of the sandbox. |
+| `historyIntroPage` | string or `null` | `null` | Title of a wikitext page whose content replaces the history box text. See [Rich content](#rich-content-images-video-anything-wikitext-can-do). |
 | `messages` | object | `{}` | Overrides individual interface strings by key. See the warning below. |
 
 Unknown keys are ignored, so a future option can be added without breaking existing pages.
@@ -151,6 +154,70 @@ If you do override something:
 - Values are inserted as text, never as HTML. Wikitext markup will appear literally.
 - Only string values are applied; anything else is ignored.
 
+## Rich content: images, video, anything wikitext can do
+
+The `messages` object handles words. When you want more than words in the history box — a diagram,
+a screenshot of the history page with callouts, a short Commons video, a template — write a
+**wikitext page** and point at it:
+
+```json
+"historyIntroPage": "User:YOU/wikifame-history"
+```
+
+Then create `User:YOU/wikifame-history` and write ordinary wikitext:
+
+```wikitext
+[[File:Wikipedia history page annotated.png|thumb|right|300px|Each line is one version.]]
+Every line below is one version of this article, and the name on it is the person who
+made that change. Nothing here is permanent: you can add to it too.
+```
+
+MediaWiki parses and sanitises that page, and the script inserts the result. Images, galleries,
+Commons video, templates, tables, and formatting all work, because none of it is being handled by
+this script — the wiki does the work, and you preview and revert it like any other page.
+
+### What you should know before using it
+
+- **It replaces, it does not add.** When the page exists, its content takes the place of the
+  built-in explanation *and* the editing-help sentence. `editHelpPage` and `sandboxPage` stop
+  affecting the box, so re-add those links in your wikitext if you still want them.
+- **The "you can also edit this article" line stays**, always, below your content. It is built by
+  the script on purpose: your page is parsed on its own, so it has no idea which article the reader
+  is looking at. `{{FULLPAGENAME}}` in your wikitext would resolve to the *introduction page*, and
+  the link would offer to edit the wrong page. Same for `{{PAGENAME}}` and friends.
+- **One language per page.** The script tries `…/fr-ca`, then `…/fr`, then the bare title, using
+  your interface language. So `User:YOU/wikifame-history/fr` serves French readers and
+  `User:YOU/wikifame-history` catches everyone else. This is the piece `messages` gets wrong, and
+  the reason to prefer this route for anything longer than a phrase.
+- **Weight is on you.** This box renders on every history view. A large image or an autoplaying
+  video would be paid for every time. The script sets images to load lazily and stops video from
+  autoplaying or preloading, but it cannot make a 4 MB PNG small.
+- **Video needs TimedMediaHandler**, which most Wikipedias have. Where it is missing you get a
+  plain player rather than the enhanced one. Nothing breaks.
+- **A missing page is not an error.** If the page does not exist, is deleted, or the wiki is
+  unreachable, the built-in wording renders instead. The result — including "there is no such
+  page" — is cached for 24 hours, so create the page *before* pointing at it, or expect up to a
+  day's delay in a tab you have already opened.
+
+### JavaScript
+
+Not through the configuration page — a `.json` page that might contain code is a page nobody can
+review by reading it. The script fires two hooks instead:
+
+```javascript
+mw.hook( 'wikifame.history' ).add( function ( box, wikiConfig ) {
+	// box is the rendered <div>, already in the page.
+} );
+
+mw.hook( 'wikifame.summary' ).add( function ( summary, data ) {
+	// data.contributors, data.distinct_contributors, data.computed_at…
+} );
+```
+
+Put that in your own `common.js`, after the `importScript` line. This gives you the full DOM and
+the full language, which is strictly more than a configuration page could ever offer, and it keeps
+the JSON to things that can be validated.
+
 ## When nothing renders
 
 The script is deliberately silent — it never shows an error to a reader. Work through these in
@@ -161,8 +228,10 @@ order:
 | Nothing on any article, this wiki only | The wiki is not covered by WikiWho, or `enabled` is `false`. |
 | Nothing on one article, others fine | No result computed yet. The first request queues the work; come back later. Normal for a page nobody has viewed with the script before. |
 | Nothing anywhere, on every wiki | The script is not loading. Check the `importScript` line in your `common.js`, and the browser console. |
-| The sentence shows but the help sentence does not | `editHelpPage` and `sandboxPage` are not both set, or `showHistoryIntro` is `false`. |
+| The sentence shows but the help sentence does not | `editHelpPage` and `sandboxPage` are not both set, `showHistoryIntro` is `false`, or `historyIntroPage` is set and has replaced it. |
 | Configuration edits have no effect | Stale `sessionStorage`; open a new tab. Or a key is misspelled — unknown keys are ignored silently. |
+| `historyIntroPage` is set but the built-in text still shows | The page does not exist under any of the three titles tried, or its absence is still cached. Create it, then open a new tab. |
+| Custom content renders but looks wrong | It is your wikitext, parsed as usual. Preview the page on its own; what you see there is what the box gets. Oversized media is constrained by `wikifame.css`, not fixed. |
 
 The attribution sentence appears on normal article views only: not on diffs, not on old revisions,
 not outside the main namespace.
@@ -187,3 +256,5 @@ then, user space keeps the prototype installable by anyone, with no rights and n
 - [Architecture](architecture.md) — how a wiki is resolved and what gets stored.
 - [ADR-0003](decisions/0003-universal-wiki-support.md) — why configuration lives on-wiki rather
   than in the service.
+- [ADR-0004](decisions/0004-on-wiki-extensibility.md) — why rich content is a wikitext page and
+  JavaScript is a hook, rather than either living in the JSON.

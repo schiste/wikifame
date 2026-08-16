@@ -112,6 +112,7 @@ job is supplying the two local titles the script cannot guess:
 	"showHistoryIntro": true,
 	"editHelpPage": "Aide:Comment modifier une page",
 	"sandboxPage": "Wikipédia:Bac à sable",
+	"historyIntroPage": null,
 	"messages": {}
 }
 ```
@@ -125,6 +126,21 @@ a community adopts it as a site-wide gadget, the same file moves to
 `MediaWiki:Wikifame-config.json`.
 
 Full instructions, field reference, and troubleshooting: [on-wiki setup](docs/onwiki-setup.md).
+
+## Going further than settings
+
+The JSON page stays declarative on purpose, so two escape hatches exist for anything it cannot
+express:
+
+- `historyIntroPage` names a **wikitext page** whose parsed content replaces the history-box text.
+  Images, galleries, Commons video, and templates all work, because MediaWiki does the parsing and
+  the sanitising. Translations go on `/fr`-style language subpages.
+- `mw.hook( 'wikifame.history' )` and `mw.hook( 'wikifame.summary' )` fire with the rendered
+  element, so arbitrary JavaScript goes in your own `common.js` rather than in a configuration
+  page.
+
+Nothing in a configuration page is ever executed or treated as markup. See
+[ADR-0004](docs/decisions/0004-on-wiki-extensibility.md).
 
 ## Toolforge deployment
 

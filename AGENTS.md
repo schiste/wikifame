@@ -24,6 +24,9 @@ serves every Wikipedia WikiWho covers.
 - Keep the gadget wiki-agnostic: no wiki name, host, namespace prefix, page title, plural form, or
   list separator may be hard-coded. Per-wiki settings belong in the on-wiki configuration page
   (`User:<name>/wikifame-config.json` while this is a personal script).
+- Nothing from a configuration page is ever executed or inserted as markup. Rich content comes from
+  a wikitext page through MediaWiki's parser; JavaScript comes from `mw.hook`. No `eval`, no
+  `innerHTML`.
 - Capability and enablement stay separate. Whether a wiki can be analysed is derived in
   `sites.py`; whether it is served is configuration. Capability always wins.
 - Universal serving never implies universal crawling. `BACKFILL_WIKIS` stays an explicit opt-in.

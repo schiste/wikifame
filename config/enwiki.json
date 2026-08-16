@@ -3,5 +3,6 @@
 	"showHistoryIntro": true,
 	"editHelpPage": "Help:Editing",
 	"sandboxPage": "Wikipedia:Sandbox",
+	"historyIntroPage": null,
 	"messages": {}
 }

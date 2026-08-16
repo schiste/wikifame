@@ -40,7 +40,14 @@ def test_defaults_are_published_for_the_wikis_the_gadget_already_speaks() -> Non
 
 def test_defaults_are_valid_json_using_only_keys_the_gadget_reads() -> None:
     known = _config_keys()
-    assert known == {"enabled", "showHistoryIntro", "editHelpPage", "sandboxPage", "messages"}
+    assert known == {
+        "enabled",
+        "showHistoryIntro",
+        "editHelpPage",
+        "sandboxPage",
+        "historyIntroPage",
+        "messages",
+    }
 
     for path in DEFAULTS:
         default = json.loads(path.read_text(encoding="utf-8"))
@@ -50,6 +57,9 @@ def test_defaults_are_valid_json_using_only_keys_the_gadget_reads() -> None:
         assert isinstance(default["showHistoryIntro"], bool), path.name
         # The help sentence renders only when both titles are present.
         assert bool(default["editHelpPage"]) == bool(default["sandboxPage"]), path.name
+        # Rich content is opt-in: a published default must never point at a page that
+        # only exists on the wiki it was copied from.
+        assert default["historyIntroPage"] is None, path.name
         assert set(default.get("messages", {})) <= _message_keys(), path.name
 
 
