@@ -93,3 +93,57 @@ def test_cleanup_keeps_latest_result_even_when_it_is_old(tmp_path: Path) -> None
     assert repository.get_result("frwiki", 10, 20, "v1") is None
     assert repository.get_result("frwiki", 10, 21, "v1") is not None
     assert repository.get_result("frwiki", 11, 30, "v1") is not None
+
+
+def test_latest_result_is_selected_by_computation_time(tmp_path: Path) -> None:
+    repository = make_repository(tmp_path)
+    now = utcnow()
+
+    for revision_id, computed_at in ((20, now - timedelta(days=2)), (21, now)):
+        repository.save_result(
+            {
+                "wiki": "frwiki",
+                "page_id": 10,
+                "revision_id": revision_id,
+                "algorithm_version": "v1",
+                "title": "Page",
+                "metric": "test",
+                "contributors": [],
+                "distinct_contributors": 1,
+                "count_limited": False,
+                "countable_tokens": 1,
+                "wikiwho_revision_id": revision_id,
+                "computed_at": computed_at,
+            }
+        )
+
+    latest = repository.get_latest_result("frwiki", 10, "v1")
+
+    assert latest is not None and latest.revision_id == 21
+
+
+def test_expired_exact_revision_can_be_enqueued_for_refresh(tmp_path: Path) -> None:
+    repository = make_repository(tmp_path)
+    repository.save_result(
+        {
+            "wiki": "frwiki",
+            "page_id": 10,
+            "revision_id": 20,
+            "algorithm_version": "v1",
+            "title": "Page",
+            "metric": "test",
+            "contributors": [],
+            "distinct_contributors": 1,
+            "count_limited": False,
+            "countable_tokens": 1,
+            "wikiwho_revision_id": 20,
+            "computed_at": utcnow() - timedelta(days=91),
+        }
+    )
+
+    queued = repository.enqueue_if_stale(
+        "frwiki", 10, 20, "v1", priority=50, freshness_seconds=90 * 24 * 60 * 60
+    )
+
+    assert queued is True
+    assert repository.get_work("frwiki", 10, 20, "v1") is not None

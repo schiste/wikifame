@@ -46,6 +46,9 @@ class Settings:
     worker_max_attempts: int
     dead_retry_seconds: int
     ready_cache_seconds: int
+    page_freshness_seconds: int
+    page_cache_seconds: int
+    page_stale_while_revalidate_seconds: int
     methodology_url: str
 
     @classmethod
@@ -80,6 +83,11 @@ class Settings:
             worker_max_attempts=int(os.getenv("WORKER_MAX_ATTEMPTS", "8")),
             dead_retry_seconds=int(os.getenv("DEAD_RETRY_SECONDS", "86400")),
             ready_cache_seconds=int(os.getenv("READY_CACHE_SECONDS", "31536000")),
+            page_freshness_seconds=int(os.getenv("PAGE_FRESHNESS_SECONDS", str(90 * 24 * 60 * 60))),
+            page_cache_seconds=int(os.getenv("PAGE_CACHE_SECONDS", "86400")),
+            page_stale_while_revalidate_seconds=int(
+                os.getenv("PAGE_STALE_WHILE_REVALIDATE_SECONDS", "604800")
+            ),
             methodology_url=os.getenv(
                 "METHODOLOGY_URL",
                 "https://github.com/schiste/wikifame/blob/main/docs/architecture.md",

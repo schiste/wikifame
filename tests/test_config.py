@@ -25,3 +25,15 @@ def test_explicit_database_url_wins_over_toolforge_credentials(
     monkeypatch.setenv("TOOL_TOOLSDB_PASSWORD", "secret")
 
     assert Settings.from_env().database_url == "sqlite:///explicit.db"
+
+
+def test_page_freshness_defaults_are_explicit(monkeypatch: MonkeyPatch) -> None:
+    monkeypatch.delenv("PAGE_FRESHNESS_SECONDS", raising=False)
+    monkeypatch.delenv("PAGE_CACHE_SECONDS", raising=False)
+    monkeypatch.delenv("PAGE_STALE_WHILE_REVALIDATE_SECONDS", raising=False)
+
+    settings = Settings.from_env()
+
+    assert settings.page_freshness_seconds == 90 * 24 * 60 * 60
+    assert settings.page_cache_seconds == 24 * 60 * 60
+    assert settings.page_stale_while_revalidate_seconds == 7 * 24 * 60 * 60

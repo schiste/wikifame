@@ -1,8 +1,10 @@
 from dataclasses import replace
+from datetime import timedelta
 from pathlib import Path
 
 from wikifame.clients import EditorCount, PageMetadata
 from wikifame.config import Settings
+from wikifame.models import utcnow
 from wikifame.policy import ResolvedUser
 from wikifame.runtime import build_runtime
 from wikifame.worker import Worker
@@ -84,3 +86,49 @@ def test_worker_requeues_current_revision_instead_of_computing_stale_one(
     assert old is not None and old.state == "superseded"
     assert current is not None and current.state == "pending"
     assert current.priority == 50
+
+
+def test_worker_refreshes_expired_result_for_unchanged_revision(tmp_path: Path) -> None:
+    settings = replace(
+        Settings.from_env(),
+        database_url=f"sqlite:///{tmp_path / 'refresh.db'}",
+        minimum_tokens=5,
+    )
+    runtime = build_runtime(settings)
+    runtime.database.create_schema()
+    old_computed_at = utcnow() - timedelta(days=91)
+    runtime.repository.save_result(
+        {
+            "wiki": "frwiki",
+            "page_id": 100,
+            "revision_id": 200,
+            "algorithm_version": settings.algorithm_version,
+            "title": "France",
+            "metric": "old-metric",
+            "contributors": [],
+            "distinct_contributors": 1,
+            "count_limited": False,
+            "countable_tokens": 1,
+            "wikiwho_revision_id": 200,
+            "computed_at": old_computed_at,
+        }
+    )
+    assert runtime.repository.enqueue_if_stale(
+        "frwiki",
+        100,
+        200,
+        settings.algorithm_version,
+        priority=100,
+        freshness_seconds=settings.page_freshness_seconds,
+    )
+    worker = Worker(runtime, worker_id="test")
+    worker.mediawiki = FakeMediaWiki()  # type: ignore[assignment]
+    worker.wikiwho = FakeWikiWho()  # type: ignore[assignment]
+
+    assert worker.run_once() is True
+    refreshed = runtime.repository.get_result("frwiki", 100, 200, settings.algorithm_version)
+
+    assert refreshed is not None
+    assert refreshed.computed_at > old_computed_at
+    assert refreshed.metric == "wikiwho-surviving-alphanumeric-tokens"
+    assert runtime.repository.get_work("frwiki", 100, 200, settings.algorithm_version) is None

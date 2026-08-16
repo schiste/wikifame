@@ -40,6 +40,21 @@ class Repository:
                 )
             )
 
+    def get_latest_result(
+        self, wiki: str, page_id: int, algorithm_version: str
+    ) -> AttributionResult | None:
+        with self.database.session() as session:
+            return session.scalar(
+                select(AttributionResult)
+                .where(
+                    AttributionResult.wiki == wiki,
+                    AttributionResult.page_id == page_id,
+                    AttributionResult.algorithm_version == algorithm_version,
+                )
+                .order_by(AttributionResult.computed_at.desc(), AttributionResult.id.desc())
+                .limit(1)
+            )
+
     def get_work(
         self, wiki: str, page_id: int, revision_id: int, algorithm_version: str
     ) -> WorkItem | None:
@@ -60,9 +75,13 @@ class Repository:
         revision_id: int,
         algorithm_version: str,
         priority: int,
+        allow_cached_result: bool = False,
     ) -> None:
         now = utcnow()
-        if self.get_result(wiki, page_id, revision_id, algorithm_version) is not None:
+        if (
+            not allow_cached_result
+            and self.get_result(wiki, page_id, revision_id, algorithm_version) is not None
+        ):
             return
         try:
             with self.database.session() as session, session.begin():
@@ -126,6 +145,31 @@ class Repository:
                     )
                     .values(priority=priority, updated_at=now)
                 )
+
+    def enqueue_if_stale(
+        self,
+        wiki: str,
+        page_id: int,
+        revision_id: int,
+        algorithm_version: str,
+        priority: int,
+        freshness_seconds: int,
+    ) -> bool:
+        latest = self.get_latest_result(wiki, page_id, algorithm_version)
+        cutoff = utcnow() - timedelta(seconds=freshness_seconds)
+        if latest is not None and latest.computed_at >= cutoff:
+            return False
+
+        self.enqueue(
+            wiki=wiki,
+            page_id=page_id,
+            revision_id=revision_id,
+            algorithm_version=algorithm_version,
+            priority=priority,
+            allow_cached_result=True,
+        )
+        work = self.get_work(wiki, page_id, revision_id, algorithm_version)
+        return work is not None and work.state in {"pending", "leased"}
 
     def claim(self, worker_id: str, lease_seconds: int) -> WorkLease | None:
         now = utcnow()
