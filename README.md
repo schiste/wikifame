@@ -21,6 +21,10 @@ and their daughter**. This project turns their family idea into an open Wikimedi
 - `src/wikifame/backfill.py`: resumable, low-priority long-tail coverage.
 - `src/wikifame/cleanup.py`: queue and old-revision retention.
 
+The gadget uses a page-level result for up to 90 days. After that period, the API serves the
+last known attribution while a worker refreshes it asynchronously. Stored results still record
+the exact source revision and calculation date for auditability.
+
 See [the architecture and scaling rules](docs/architecture.md) for cache identity, attribution
 policy, update behavior, privacy, and the path toward millions of articles.
 
@@ -33,6 +37,8 @@ policy, update behavior, privacy, and the path toward millions of articles.
   backups, and maintainer transfer.
 - [ADR-0001](docs/decisions/0001-attribution-policy.md): accepted attribution policy and its
   known limitations.
+- [ADR-0002](docs/decisions/0002-page-freshness.md): 90-day page freshness and stale-while-
+  revalidate behavior.
 - [Contributing](CONTRIBUTING.md): local workflow and change checklist.
 - [Agent guide](AGENTS.md): repository invariants and commands for coding agents.
 

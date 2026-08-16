@@ -12,7 +12,8 @@ historical contributor count to page history. Toolforge is the prototype backend
 
 - Never call WikiWho, MediaWiki, or Analytics from the FastAPI request path. Cache misses enqueue
   durable work and return `202`.
-- Cache identity is `(wiki, page_id, revision_id, algorithm_version)`; do not key by title.
+- Stored-result identity is `(wiki, page_id, revision_id, algorithm_version)`; do not key by
+  title. V2 may serve the newest page/algorithm result until its configured freshness expires.
 - Never highlight IPs, anonymous actors, temporary usernames (`~…`), missing users, or bots.
 - A semantic policy change requires a new `ALGORITHM_VERSION` and documented decision.
 - A breaking API change requires a new version rather than silently changing `/v1`.

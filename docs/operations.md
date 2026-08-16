@@ -64,6 +64,13 @@ The API web process never calls these upstream services. Only workers and schedu
 8. Request one real page/revision, run or wait for a worker, and verify the transition from
    `202 pending` to `200 ready` before publishing the gadget URL.
 
+No database migration is required for the page-freshness release: it reuses the existing
+`computed_at` column and page/algorithm index. The three new environment controls are:
+
+- `PAGE_FRESHNESS_SECONDS` (default `7776000`, 90 days);
+- `PAGE_CACHE_SECONDS` (default `86400`, one day);
+- `PAGE_STALE_WHILE_REVALIDATE_SECONDS` (default `604800`, seven days).
+
 Toolforge environment-variable configuration is deployment state, not source code. Record the
 variable names—not their values—in the maintainer handoff.
 
@@ -84,12 +91,13 @@ Confirm `/healthz`, inspect webservice logs, and check that both worker replicas
 | Job | Type | Expected behavior |
 | --- | --- | --- |
 | `attribution-worker` | Continuous, two replicas | Claims durable jobs and calls WikiWho |
-| `popular-prewarm` | Daily | Enqueues the union of seven daily top-page lists at P50 |
+| `popular-prewarm` | Daily | Scans backward to enqueue seven available top-1000 lists at P50 |
 | `gradual-backfill` | Hourly | Enqueues one resumable alphabetical batch at P10 |
 | `cache-cleanup` | Weekly | Removes old failed work and superseded result revisions |
 
-Live gadget misses enqueue P100 work. Do not increase worker replicas until WikiWho capacity and
-observed latency justify it.
+Live gadget misses and expired results enqueue P100 work. Prewarm and backfill skip any page with
+a result younger than `PAGE_FRESHNESS_SECONDS`. Do not increase worker replicas until WikiWho
+capacity and observed latency justify it.
 
 ## Monitoring
 
@@ -97,6 +105,8 @@ Check:
 
 - `/healthz` for database reachability;
 - `/v1/stats` occasionally for queue growth and dead items;
+- `/v2/frwiki/pages/{page_id}?revision_id={revision_id}` for `is_fresh`, `refreshing`, and the
+  `X-WikiFame-Source-Revision` header on a known article;
 - `toolforge webservice buildservice logs -f` for API errors;
 - `toolforge jobs logs attribution-worker -f` for upstream or worker failures;
 - ToolsDB size after 100,000, 500,000, and 1,000,000 ready rows;
@@ -114,8 +124,9 @@ Reader-demand jobs have higher priority and should recover first.
 
 ### WikiWho is unavailable
 
-Leave cached `200` responses online. Pause prewarm/backfill if the outage is prolonged. Jobs use
-exponential backoff, and exhausted transient jobs can revive after `DEAD_RETRY_SECONDS`.
+Leave cached `200` responses online. V2 deliberately continues returning an expired result while
+its refresh retries. Pause prewarm/backfill if the outage is prolonged. Jobs use exponential
+backoff, and exhausted transient jobs can revive after `DEAD_RETRY_SECONDS`.
 
 ### A policy result is wrong
 

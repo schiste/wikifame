@@ -1,9 +1,68 @@
 # API contract
 
-The gadget consumes one revision-specific, read-only resource. Keep this contract backwards
-compatible within `/v1`; add a new API version for breaking changes.
+The gadget consumes the page-freshness resource under `/v2`. The exact-revision `/v1` contract
+remains available for backwards compatibility. Keep each version backwards compatible; add a new
+API version for breaking changes.
 
-## Get attribution
+## Get current page attribution (`v2`)
+
+```http
+GET /v2/{wiki}/pages/{page_id}?revision_id={revision_id}
+```
+
+The gadget sends the current revision so a refresh job knows what to calculate. A ready result is
+selected by `(wiki, page_id, algorithm_version)`, not by exact requested revision. This lets one
+calculation remain usable across ordinary edits for `PAGE_FRESHNESS_SECONDS`, 90 days by default.
+
+### Ready or refreshing — `200 OK`
+
+```json
+{
+  "status": "ready",
+  "wiki": "frwiki",
+  "page_id": 123,
+  "requested_revision_id": 789,
+  "source_revision_id": 456,
+  "title": "Exemple",
+  "algorithm_version": "surviving-tokens-v1",
+  "metric": "wikiwho-surviving-alphanumeric-tokens",
+  "contributors": [],
+  "distinct_contributors": 47,
+  "other_contributors": 47,
+  "count_limited": false,
+  "countable_tokens": 987,
+  "computed_at": "2026-08-16T10:00:00Z",
+  "fresh_until": "2026-11-14T10:00:00Z",
+  "is_fresh": true,
+  "refreshing": false,
+  "methodology_url": "https://github.com/schiste/wikifame/blob/main/docs/architecture.md"
+}
+```
+
+- `source_revision_id` is the exact revision analyzed by WikiWho.
+- `requested_revision_id` is the revision displayed when the request was made.
+- `is_fresh` is true until `computed_at + PAGE_FRESHNESS_SECONDS`.
+- When the result is expired, the same payload is returned with `is_fresh: false` and normally
+  `refreshing: true`; a P100 refresh has been queued for the requested revision.
+
+Ready responses use bounded browser caching:
+
+```http
+Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+X-WikiFame-Algorithm: surviving-tokens-v1
+X-WikiFame-Source-Revision: 456
+```
+
+The browser may therefore reuse a response for one day, but it is never immutable. Operators can
+tune these durations with `PAGE_CACHE_SECONDS` and `PAGE_STALE_WHILE_REVALIDATE_SECONDS`.
+
+### No result yet — `202 Accepted`
+
+The response shape is the same pending shape documented for v1 below. The request creates or
+reuses one durable P100 job for the requested revision. The gadget retries briefly during the
+current visit and otherwise waits for a later page view.
+
+## Get exact revision attribution (`v1`, legacy)
 
 ```http
 GET /v1/{wiki}/pages/{page_id}?revision_id={revision_id}
@@ -56,7 +115,8 @@ Cache-Control: public, max-age=31536000, immutable
 X-WikiFame-Algorithm: surviving-tokens-v1
 ```
 
-Immutability is safe because the revision and algorithm version are part of the cache identity.
+Immutability is safe for v1 because the revision and algorithm version are part of the cache
+identity. New gadget clients should use v2.
 
 ### Pending — `202 Accepted`
 

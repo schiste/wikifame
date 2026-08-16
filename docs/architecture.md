@@ -2,17 +2,19 @@
 
 ## Request path
 
-1. The gadget requests `GET /v1/frwiki/pages/{page_id}?revision_id={revision_id}`.
-2. A ready result is returned with an immutable one-year browser cache header.
-3. A miss creates one durable queue row and returns `202 pending` immediately.
-4. A continuous worker validates that the requested revision is still current.
-5. The worker fetches token provenance from WikiWho, resolves user IDs through the
+1. The gadget requests `GET /v2/frwiki/pages/{page_id}?revision_id={revision_id}`.
+2. The API selects the newest result for the page and current algorithm.
+3. A result younger than 90 days is returned with a bounded one-day browser cache.
+4. An older result is returned immediately and a P100 refresh is enqueued in the background.
+5. A page with no result creates one durable queue row and returns `202 pending` immediately.
+6. A continuous worker validates that the requested revision is still current.
+7. The worker fetches token provenance from WikiWho, resolves user IDs through the
    MediaWiki Action API, obtains the historical editor count, and stores a compact result.
 
 No WikiWho request runs in the web process. A unique database constraint collapses a
 thundering herd for the same page and revision into one job.
 
-## Cache identity and updates
+## Storage identity, freshness, and updates
 
 The immutable identity is:
 
@@ -20,10 +22,24 @@ The immutable identity is:
 wiki + page_id + revision_id + algorithm_version
 ```
 
-Titles are metadata rather than identity because pages can be renamed. There is no explicit
-invalidation: after an edit, MediaWiki exposes a new revision ID and the gadget requests a new
-entry. Pending work for older revisions is marked `superseded`. The cleanup job removes old
-non-current result versions but always retains the newest computed version for a page.
+Titles are metadata rather than identity because pages can be renamed. V1 reads this exact
+identity. V2 selects the newest stored result by `wiki + page_id + algorithm_version`, then exposes
+its revision as `source_revision_id` for provenance.
+
+The default freshness window is 90 days. Ordinary edits do not invalidate a fresh page-level
+result because the product accepts attribution calculated within the last three months. Once the
+window expires, stale-while-revalidate keeps the old data visible while exactly one current-
+revision job is queued. Pending work for older revisions is marked `superseded`. The cleanup job
+removes old non-current result versions but always retains the newest computed version for a page.
+
+This policy separates three clocks:
+
+- ToolsDB calculation freshness: 90 days;
+- browser and intermediary freshness: one day;
+- stale browser reuse during transient failure: seven days.
+
+All three are configurable. A future editor-triggered invalidation can enqueue a refresh without
+discarding the last known result; it does not require changing the storage identity.
 
 Changing any attribution rule that can affect output requires a new `ALGORITHM_VERSION`.
 This prevents an old response from being confused with a new interpretation of contribution.
@@ -52,12 +68,16 @@ review, maintenance, media work, reverted contributions, or the quality of an ed
 | Priority | Source | Purpose |
 | --- | --- | --- |
 | 100 | Live gadget cache miss | Serve demonstrated reader demand first |
-| 50 | Top pageviews over the last seven days | Keep likely requests warm |
+| 50 | Union of seven available daily top-1000 lists | Keep likely requests warm |
 | 10 | Resumable alphabetical backfill | Grow long-tail coverage without starving demand |
 
 Workers retry transient failures with exponential backoff capped at six hours. A lease makes a
 job recoverable after a worker crash. Two worker replicas are the conservative starting point;
 increase concurrency only after agreeing on a safe rate with WikiWho operators.
+
+The Analytics dataset can be published several days late. Prewarm scans backwards, skips `404`
+days, and stops after finding seven available daily lists. Each run only queues pages whose newest
+result has passed the 90-day window, so recurring popularity does not cause repeated WikiWho work.
 
 ## Millions of pages
 
@@ -91,6 +111,6 @@ short retention and must never be repurposed as reader profiles.
   the time of every historical edit.
 - `Base.metadata.create_all()` creates a fresh schema but is not a migration framework. Introduce
   versioned migrations before changing a database that already contains production data.
-- The gadget has no page-specific fixture; every article uses revision-specific Toolforge data.
+- The gadget has no page-specific fixture; every article uses traceable Toolforge data.
 - Toolforge is the prototype host. A default gadget for all readers requires a Wikimedia-scale
   request path and privacy review.
