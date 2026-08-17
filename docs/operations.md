@@ -132,9 +132,24 @@ After merging a code change:
 toolforge build start https://github.com/schiste/wikifame
 toolforge webservice buildservice restart
 toolforge jobs load jobs.yaml
+toolforge jobs restart attribution-worker
 ```
 
-Confirm `/healthz`, inspect webservice logs, and check that both worker replicas are running.
+The last line is not redundant. `jobs load` reconciles the job *definition*, and a deployment
+that changes only code leaves that definition identical, so nothing is recreated and the
+continuous worker keeps running the image it started with. The webservice restarts and the
+workers do not, which is the worst version of a half-deployment: the API announces the new
+`ALGORITHM_VERSION` while old workers compute the rows filed under it. Scheduled jobs need no
+restart because each run starts a new pod.
+
+Confirm the rollout before believing it:
+
+```bash
+toolforge jobs show attribution-worker    # "Started at" must be after the build
+curl -fsS https://wikifame.toolforge.org/v1/stats
+```
+
+Then inspect webservice logs and check that both worker replicas are running.
 
 ## Job inventory
 
