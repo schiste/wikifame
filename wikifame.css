@@ -22,9 +22,10 @@
 	margin: 0.12rem 0;
 }
 
-/* Digits stand in for the count while a slow request runs. Tabular figures and a
-   reserved width keep the sentence from reflowing on every frame: without them the
-   varying digit widths shift the text beside them eighty times a second. */
+/* Digits stand in for the count until the answer arrives, which is never immediate:
+   the request opens a fresh connection to another host. Tabular figures and a reserved
+   width keep the sentence from reflowing on every frame: without them the varying digit
+   widths shift the text beside them eighty times a second. */
 .wikifame-rolling {
 	display: inline-block;
 	min-width: 4ch;

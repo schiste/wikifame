@@ -186,20 +186,23 @@ def test_source_holds_no_control_characters() -> None:
     assert "'\\u0000' + index" in GADGET_SOURCE
 
 
-def test_slow_requests_alone_get_a_placeholder() -> None:
-    """A warm response beats the threshold, so the usual reader waits on nothing.
+def test_the_box_holds_its_space_from_the_first_frame() -> None:
+    """No answer reaches this gadget quickly, so waiting to draw only shifts the page.
 
-    Showing a spinner for a 150 ms answer manufactures a wait that does not exist,
-    which is why the state machine starts at 'hidden' rather than at 'rolling'.
+    A fresh connection to another host costs DNS, TCP and TLS before the first byte:
+    measured at roughly 280 ms even against warm data. Drawing on arrival would insert
+    a box into an article the reader has already begun, so there is no state for an
+    empty page and the placeholder is not conditional on the request being slow.
     """
     body = GADGET_SOURCE.split("function countDisplayState(", 1)[1].split("\n\t}", 1)[0]
-    assert "COUNT_ROLL_START_MS" in body
-    assert "'hidden'" in body
     assert "'rolling'" in body
+    assert "'still'" in body
     assert "'vague'" in body
     assert "'final'" in body
     # A result that is already in hand outranks every timer.
-    assert body.index("'final'") < body.index("'hidden'")
+    assert body.index("'final'") < body.index("'rolling'")
+    # The threshold that used to delay the first paint is gone, not merely set to zero.
+    assert "COUNT_ROLL_START_MS" not in GADGET_SOURCE
 
     summary = GADGET_SOURCE.split("async function addArticleSummary(", 1)[1].split(
         "\n\tasync function", 1
@@ -209,14 +212,14 @@ def test_slow_requests_alone_get_a_placeholder() -> None:
         "runCountPlaceholder("
     )
 
-    # 'hidden' outlasts the start threshold under reduced motion, so the wait has to
-    # target whichever threshold is still ahead. Subtracting from the first one goes
-    # negative and turns the driver's loop into a busy wait.
     driver = GADGET_SOURCE.split("async function runCountPlaceholder(", 1)[1].split(
         "\n\t}", 1
     )[0]
-    assert "hiddenWaitMs(" in driver
-    assert "COUNT_ROLL_START_MS - ( Date.now() - startedAt )" not in driver
+    # Inserted before the first await, so the space is reserved in the same frame the
+    # gadget runs rather than one timer later.
+    assert driver.index("insertBelowSubtitle( box )") < driver.index("await")
+    # A motionless box has nothing to redraw, so it waits once instead of every frame.
+    assert "COUNT_ROLL_SETTLE_MS - ( Date.now() - startedAt )" in driver
 
 
 def test_turning_digits_are_never_announced_or_left_spinning() -> None:
@@ -240,6 +243,11 @@ def test_turning_digits_are_never_announced_or_left_spinning() -> None:
     assert "'(prefers-reduced-motion: reduce)'" in GADGET_SOURCE
     assert "animation: none" in GADGET_STYLES
     assert "prefers-reduced-motion: reduce" in GADGET_STYLES
+
+    # Less motion means a motionless box, not a missing one: dropping the placeholder
+    # would hand these readers back the page shift everyone else is spared.
+    policy = GADGET_SOURCE.split("function countDisplayState(", 1)[1].split("\n\t}", 1)[0]
+    assert "prefersReducedMotion() ? 'still' : 'rolling'" in policy
 
 
 def test_placeholder_reserves_its_width_so_the_sentence_cannot_jitter() -> None:

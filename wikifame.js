@@ -42,12 +42,13 @@
 	var CONTENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 	var PENDING_RETRY_DELAYS_MS = [ 3000, 10000 ];
 
-	// A warm response lands well inside COUNT_ROLL_START_MS, so the usual reader never
-	// sees a placeholder at all: showing one immediately would invent a wait that is not
-	// there. Rolling stops at COUNT_ROLL_SETTLE_MS because the retry chain can run for
-	// thirteen seconds and nobody watches digits spin that long — the box settles on
-	// wording that is true whatever the answer, and the real sentence replaces it later.
-	var COUNT_ROLL_START_MS = 200;
+	// The box is drawn before the answer exists, not after. Nothing reaches this gadget
+	// in under roughly 280 ms — it opens a fresh connection to another host, so every
+	// reader pays DNS, TCP and TLS however warm the data is — and inserting the box on
+	// arrival would push the article down under a reader who has already started reading.
+	// Rolling stops at COUNT_ROLL_SETTLE_MS because the retry chain can run for thirteen
+	// seconds and nobody watches digits spin that long: the box settles on wording that
+	// is true whatever the answer, and the real sentence replaces it later.
 	var COUNT_ROLL_SETTLE_MS = 2500;
 	var COUNT_ROLL_FRAME_MS = 80;
 	var COUNT_ROLL_DIGITS = 4;
@@ -575,40 +576,27 @@
 	/**
 	 * What the count should look like right now.
 	 *
-	 * 'hidden'  nothing on the page yet — the common case, because a warm response
-	 *           beats the threshold and a placeholder would only invent a wait.
-	 * 'rolling' digits turning while the request is genuinely slow.
+	 * 'rolling' digits turning while the answer is on its way.
+	 * 'still'   the same box, holding its space without the motion.
 	 * 'vague'   wording that holds whatever the answer turns out to be.
 	 * 'final'   the real sentence.
 	 *
-	 * Separated from the DOM so the whole timing policy is eight readable lines.
+	 * There is no state for an empty page: the box exists from the first frame, so that
+	 * the sentence lands in space already reserved for it rather than shoving the
+	 * article aside three hundred milliseconds in.
+	 *
+	 * Separated from the DOM so the whole timing policy is six readable lines.
 	 */
 	function countDisplayState( elapsedMs, data ) {
 		if ( data ) {
 			return 'final';
 		}
-		if ( elapsedMs < COUNT_ROLL_START_MS ) {
-			return 'hidden';
-		}
 		if ( elapsedMs < COUNT_ROLL_SETTLE_MS ) {
-			// Without animation there is nothing to gain by appearing early, and a
-			// reader who asked for less motion is the last one who should be shown
-			// wording that flashes past on its way to being replaced.
-			return prefersReducedMotion() ? 'hidden' : 'rolling';
+			// A reader who asked for less motion still gets the reserved space and the
+			// same wording — they simply get it without the digits churning.
+			return prefersReducedMotion() ? 'still' : 'rolling';
 		}
 		return 'vague';
-	}
-
-	/**
-	 * How long 'hidden' lasts: until the next threshold that is still ahead.
-	 *
-	 * Subtracting from COUNT_ROLL_START_MS unconditionally would go negative once that
-	 * threshold passes, and a zero-delay timer in a loop is a busy wait.
-	 */
-	function hiddenWaitMs( elapsedMs ) {
-		return elapsedMs < COUNT_ROLL_START_MS ?
-			COUNT_ROLL_START_MS - elapsedMs :
-			COUNT_ROLL_SETTLE_MS - elapsedMs;
 	}
 
 	function prefersReducedMotion() {
@@ -670,35 +658,34 @@
 	/**
 	 * Drive the placeholder until the request resolves, one way or another.
 	 *
-	 * Exits as soon as `outcome.done` is set, so a fast answer costs one timer at most
-	 * and usually none: at COUNT_ROLL_START_MS the request has normally already won.
+	 * The box goes in on the first pass, before the first await, so it is part of the
+	 * page from the moment the gadget runs. Exits as soon as `outcome.done` is set.
 	 */
 	async function runCountPlaceholder( startedAt, outcome ) {
-		var box = null;
-		var digits = null;
+		var box = buildPendingSummary();
+		var digits = box.querySelector( '.wikifame-rolling' );
 		var display;
+
+		// An unrecognised skin offers nowhere to put it. Animating a detached node
+		// would burn timers nobody can see.
+		if ( !insertBelowSubtitle( box ) ) {
+			return;
+		}
 
 		while ( !outcome.done ) {
 			display = countDisplayState( Date.now() - startedAt, null );
 
-			if ( display === 'hidden' ) {
-				await wait( hiddenWaitMs( Date.now() - startedAt ) );
-				continue;
-			}
-
-			if ( !box ) {
-				box = buildPendingSummary();
-				digits = box.querySelector( '.wikifame-rolling' );
-				// An unrecognised skin offers nowhere to put it. Animating a detached
-				// node would burn timers nobody can see.
-				if ( !insertBelowSubtitle( box ) ) {
-					return;
-				}
-			}
-
 			if ( display === 'rolling' ) {
 				digits.textContent = rollingDigits();
 				await wait( COUNT_ROLL_FRAME_MS );
+				continue;
+			}
+
+			if ( display === 'still' ) {
+				// Nothing to redraw before the box settles, so one timer rather than
+				// thirty. 'still' only occurs below the threshold, so this stays
+				// positive and the loop cannot spin.
+				await wait( COUNT_ROLL_SETTLE_MS - ( Date.now() - startedAt ) );
 				continue;
 			}
 
