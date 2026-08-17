@@ -8,15 +8,21 @@ import socket
 import time
 from typing import Any
 
-from wikifame.attribution import candidate_user_ids, count_tokens, select_contributors
-from wikifame.clients import MediaWikiClient, WikiWhoClient
-from wikifame.errors import WikiFameError
+from wikifame.attribution import (
+    candidate_user_ids,
+    count_tokens,
+    select_contributors,
+    select_top_editors,
+)
+from wikifame.clients import MediaWikiClient, PageMetadata, WikiWhoClient
+from wikifame.errors import PermanentDataError, WikiFameError
 from wikifame.models import utcnow
 from wikifame.repository import Repository, WorkLease
 from wikifame.runtime import Runtime, build_runtime
 
 LOGGER = logging.getLogger(__name__)
-METRIC = "wikiwho-surviving-alphanumeric-tokens"
+METRIC_TOKENS = "wikiwho-surviving-alphanumeric-tokens"
+METRIC_EDITS = "mediawiki-revision-count"
 
 
 class Worker:
@@ -95,17 +101,7 @@ class Worker:
             )
             return
 
-        tokens = self.wikiwho.fetch_revision(lease.wiki, lease.revision_id)
-        counts, total_tokens = count_tokens(tokens)
-        user_ids = candidate_user_ids(counts, self.settings.candidate_pool_size)
-        users = self.mediawiki.resolve_users(lease.wiki, user_ids)
-        contributors = select_contributors(
-            counts=counts,
-            total_tokens=total_tokens,
-            users=users,
-            minimum_tokens=self.settings.minimum_tokens,
-            minimum_share=self.settings.minimum_share,
-        )
+        contributors, total_tokens, metric = self.attribute(lease, page)
 
         editor_count = self.mediawiki.get_editor_count(lease.wiki, page.title)
         bot_count = self.mediawiki.get_bot_contributor_count(lease.wiki, lease.page_id)
@@ -121,7 +117,7 @@ class Worker:
                 "revision_id": lease.revision_id,
                 "algorithm_version": lease.algorithm_version,
                 "title": page.title,
-                "metric": METRIC,
+                "metric": metric,
                 "contributors": contributors,
                 "distinct_contributors": distinct_contributors,
                 "count_limited": editor_count.limited,
@@ -143,6 +139,77 @@ class Worker:
             lease.revision_id,
             len(contributors),
             total_tokens,
+        )
+
+    def attribute(self, lease: WorkLease, page: PageMetadata) -> tuple[list[Any], int, str]:
+        """Name up to three accounts, preferring the strongest evidence available.
+
+        Three rungs, in descending order of what they actually claim (ADR-0005):
+
+        1. surviving tokens — who wrote the text on screen right now;
+        2. edit counts — who touched the page most, which is a weaker and different
+           claim, and is worded differently in the interface for that reason;
+        3. nothing — the caller still has the aggregate count to fall back on.
+
+        Rung 2 is reached both when WikiWho refuses the page and when it answers but no
+        account clears the significance thresholds. The two failures look different from
+        here but identical to a reader: either way there is no name to show.
+
+        Returns the contributors, the countable token total (zero when WikiWho never
+        answered) and the metric that produced the names.
+        """
+        contributors: list[Any] = []
+        total_tokens = 0
+
+        try:
+            tokens = self.wikiwho.fetch_revision(lease.wiki, lease.revision_id)
+            counts, total_tokens = count_tokens(tokens)
+            users = self.mediawiki.resolve_users(
+                lease.wiki, candidate_user_ids(counts, self.settings.candidate_pool_size)
+            )
+            contributors = select_contributors(
+                counts=counts,
+                total_tokens=total_tokens,
+                users=users,
+                minimum_tokens=self.settings.minimum_tokens,
+                minimum_share=self.settings.minimum_share,
+            )
+        except PermanentDataError as error:
+            # Only WikiWho's refusal is caught here. A missing page raises the same class
+            # from get_page, before this runs, and must still kill the job: there is
+            # nothing to attribute.
+            LOGGER.info(
+                "wikiwho declined wiki=%s revision_id=%s (%s); trying edit counts",
+                lease.wiki,
+                lease.revision_id,
+                error,
+            )
+
+        if contributors:
+            return contributors, total_tokens, METRIC_TOKENS
+
+        history = self.mediawiki.get_editor_history(
+            lease.wiki, lease.page_id, self.settings.top_editor_max_revisions
+        )
+        if not history.complete:
+            LOGGER.info(
+                "history of wiki=%s page_id=%s exceeds %s revisions; leaving it unranked",
+                lease.wiki,
+                lease.page_id,
+                self.settings.top_editor_max_revisions,
+            )
+            return [], total_tokens, METRIC_EDITS
+
+        candidates = history.counts.most_common(self.settings.candidate_pool_size)
+        users = self.mediawiki.resolve_users(lease.wiki, [user_id for user_id, _ in candidates])
+        return (
+            select_top_editors(
+                counts=history.counts,
+                total_revisions=history.revisions,
+                users=users,
+            ),
+            total_tokens,
+            METRIC_EDITS,
         )
 
     def run_forever(self) -> None:

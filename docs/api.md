@@ -27,7 +27,7 @@ calculation remain usable across ordinary edits for `PAGE_FRESHNESS_SECONDS`, 90
   "requested_revision_id": 789,
   "source_revision_id": 456,
   "title": "Exemple",
-  "algorithm_version": "surviving-tokens-v1",
+  "algorithm_version": "attribution-ladder-v2",
   "metric": "wikiwho-surviving-alphanumeric-tokens",
   "contributors": [],
   "distinct_contributors": 47,
@@ -42,6 +42,12 @@ calculation remain usable across ordinary edits for `PAGE_FRESHNESS_SECONDS`, 90
 }
 ```
 
+- `metric` says which rung of the attribution ladder produced `contributors`, and clients must
+  word their sentence from it. `wikiwho-surviving-alphanumeric-tokens` means the names wrote the
+  text; `mediawiki-revision-count` means only that they edited the page most, which is a weaker
+  claim. Treat an unrecognized value as the weaker claim, never the stronger one. Contributor
+  entries carry `token_count` under the first metric and `edit_count` under the second; `share`
+  is present under both and is a share of that metric.
 - `source_revision_id` is the exact revision analyzed by WikiWho.
 - `requested_revision_id` is the revision displayed when the request was made.
 - `is_fresh` is true until `computed_at + PAGE_FRESHNESS_SECONDS`.
@@ -52,7 +58,7 @@ Ready responses use bounded browser caching:
 
 ```http
 Cache-Control: public, max-age=86400, stale-while-revalidate=604800
-X-WikiFame-Algorithm: surviving-tokens-v1
+X-WikiFame-Algorithm: attribution-ladder-v2
 X-WikiFame-Source-Revision: 456
 ```
 
@@ -89,7 +95,7 @@ revision IDs are stable.
   "page_id": 123,
   "revision_id": 456,
   "title": "Exemple",
-  "algorithm_version": "surviving-tokens-v1",
+  "algorithm_version": "attribution-ladder-v2",
   "metric": "wikiwho-surviving-alphanumeric-tokens",
   "contributors": [
     {
@@ -115,7 +121,7 @@ Ready responses use:
 
 ```http
 Cache-Control: public, max-age=31536000, immutable
-X-WikiFame-Algorithm: surviving-tokens-v1
+X-WikiFame-Algorithm: attribution-ladder-v2
 ```
 
 Immutability is safe for v1 because the revision and algorithm version are part of the cache

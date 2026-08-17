@@ -1,13 +1,25 @@
+from collections import Counter
 from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
-from wikifame.clients import EditorCount, PageMetadata
+from wikifame.clients import EditorCount, EditorHistory, PageMetadata
 from wikifame.config import Settings
+from wikifame.errors import PermanentDataError
 from wikifame.models import utcnow
 from wikifame.policy import ResolvedUser
 from wikifame.runtime import build_runtime
 from wikifame.worker import Worker
+
+# 4 and 5 exist so the fallback can be asked to drop them: the same accounts the token
+# path would never name must be unnameable through the edit-count path too.
+ACCOUNTS = {
+    1: ResolvedUser(1, "Alice", frozenset()),
+    2: ResolvedUser(2, "Bob", frozenset()),
+    3: ResolvedUser(3, "Charlie", frozenset()),
+    4: ResolvedUser(4, "Botrix", frozenset({"bot"})),
+    5: ResolvedUser(5, "~2026-1", frozenset()),
+}
 
 
 class FakeMediaWiki:
@@ -15,14 +27,21 @@ class FakeMediaWiki:
         return PageMetadata(page_id, 200, "France", 0)
 
     def resolve_users(self, _wiki: str, user_ids: list[int]) -> dict[int, ResolvedUser]:
-        names = {1: "Alice", 2: "Bob", 3: "Charlie"}
-        return {user_id: ResolvedUser(user_id, names[user_id], frozenset()) for user_id in user_ids}
+        return {user_id: ACCOUNTS[user_id] for user_id in user_ids}
 
     def get_editor_count(self, _wiki: str, _title: str) -> EditorCount:
         return EditorCount(47, False)
 
     def get_bot_contributor_count(self, _wiki: str, _page_id: int) -> int:
         return 2
+
+    def get_editor_history(self, _wiki: str, _page_id: int, _max_revisions: int) -> EditorHistory:
+        # A bot and a temporary account outrank two of the three nameable humans.
+        return EditorHistory(
+            counts=Counter({1: 30, 4: 25, 5: 20, 2: 10, 3: 5}),
+            revisions=100,
+            complete=True,
+        )
 
 
 class FakeWikiWho:
@@ -32,6 +51,30 @@ class FakeWikiWho:
             + [{"str": "beta", "editor": "2"}] * 30
             + [{"str": "gamma", "editor": "3"}] * 10
         )
+
+
+class RefusingWikiWho:
+    """WikiWho answering 400: a fact about the page, not an outage."""
+
+    def fetch_revision(self, _wiki: str, revision_id: int) -> list[dict[str, str]]:
+        raise PermanentDataError(f"WikiWho ne sert pas la révision {revision_id} (HTTP 400)")
+
+
+class ThinWikiWho:
+    """WikiWho answers, but the page is too short for anyone to clear the thresholds."""
+
+    def fetch_revision(self, _wiki: str, _revision_id: int) -> list[dict[str, str]]:
+        return [{"str": "alpha", "editor": "1"}] * 3
+
+
+class LongHistoryMediaWiki(FakeMediaWiki):
+    def get_editor_history(self, _wiki: str, _page_id: int, _max_revisions: int) -> EditorHistory:
+        return EditorHistory(counts=Counter({1: 400}), revisions=5000, complete=False)
+
+
+class BotOnlyHistoryMediaWiki(FakeMediaWiki):
+    def get_editor_history(self, _wiki: str, _page_id: int, _max_revisions: int) -> EditorHistory:
+        return EditorHistory(counts=Counter({4: 12, 5: 3}), revisions=15, complete=True)
 
 
 class NewerRevisionMediaWiki(FakeMediaWiki):
@@ -64,6 +107,112 @@ def test_worker_builds_compact_result(tmp_path: Path) -> None:
         "Charlie",
     ]
     assert runtime.repository.stats() == {"ready": 1}
+
+
+def build_worker(tmp_path: Path, name: str, mediawiki: object, wikiwho: object) -> Worker:
+    settings = replace(
+        Settings.from_env(),
+        database_url=f"sqlite:///{tmp_path / name}",
+    )
+    runtime = build_runtime(settings)
+    runtime.database.create_schema()
+    runtime.repository.enqueue("frwiki", 100, 200, settings.algorithm_version, 100)
+    worker = Worker(runtime, worker_id="test")
+    worker.mediawiki = mediawiki  # type: ignore[assignment]
+    worker.wikiwho = wikiwho  # type: ignore[assignment]
+    return worker
+
+
+def stored(worker: Worker) -> object:
+    return worker.repository.get_result("frwiki", 100, 200, worker.settings.algorithm_version)
+
+
+def test_a_page_wikiwho_refuses_falls_back_to_edit_counts(tmp_path: Path) -> None:
+    """HTTP 400 means the page will never be tokenised, so the job stops waiting for it.
+
+    Before the ladder this exhausted eight attempts and served 503 forever. The page now
+    gets the weaker answer rather than none, and says so through its metric.
+    """
+    worker = build_worker(tmp_path, "refused.db", FakeMediaWiki(), RefusingWikiWho())
+
+    assert worker.run_once() is True
+    result = stored(worker)
+
+    assert result is not None
+    assert result.metric == "mediawiki-revision-count"
+    assert [item["username"] for item in result.contributors] == ["Alice", "Bob", "Charlie"]
+    # No tokens were ever counted, and the stored result must not imply otherwise.
+    assert result.countable_tokens == 0
+
+
+def test_the_fallback_drops_the_same_accounts_the_token_path_would(tmp_path: Path) -> None:
+    """A bot and a temporary account top this history, and neither may be named.
+
+    The rule is not reimplemented for edit counts: both paths call
+    should_highlight_contributor, so the two rankings can never disagree about who is
+    eligible — only about who is first.
+    """
+    worker = build_worker(tmp_path, "excluded.db", FakeMediaWiki(), RefusingWikiWho())
+
+    assert worker.run_once() is True
+    result = stored(worker)
+
+    assert result is not None
+    names = [item["username"] for item in result.contributors]
+    assert "Botrix" not in names
+    assert "~2026-1" not in names
+    # Alice made 30 of the 100 revisions; the share is of edits, not of surviving text.
+    assert result.contributors[0] == {
+        "user_id": 1,
+        "username": "Alice",
+        "edit_count": 30,
+        "share": 0.3,
+    }
+
+
+def test_a_page_too_short_to_rank_by_tokens_falls_back_too(tmp_path: Path) -> None:
+    """WikiWho answered; nobody cleared 20 tokens. To a reader that is the same nothing."""
+    worker = build_worker(tmp_path, "thin.db", FakeMediaWiki(), ThinWikiWho())
+
+    assert worker.run_once() is True
+    result = stored(worker)
+
+    assert result is not None
+    assert result.metric == "mediawiki-revision-count"
+    assert [item["username"] for item in result.contributors] == ["Alice", "Bob", "Charlie"]
+    # WikiWho did answer here, so the tokens it counted are still recorded.
+    assert result.countable_tokens == 3
+
+
+def test_a_history_past_the_budget_is_left_unranked_rather_than_ranked_partially(
+    tmp_path: Path,
+) -> None:
+    """Counting the newest 5000 revisions does not tell you who edited most, ever.
+
+    Naming the winner of a window under a sentence that says "most edited" would be a
+    guess. The aggregate count is still there, so the reader loses nothing true.
+    """
+    worker = build_worker(tmp_path, "long.db", LongHistoryMediaWiki(), RefusingWikiWho())
+
+    assert worker.run_once() is True
+    result = stored(worker)
+
+    assert result is not None
+    assert result.contributors == []
+    assert result.distinct_contributors == 45
+
+
+def test_a_page_only_bots_ever_touched_yields_a_count_and_no_names(tmp_path: Path) -> None:
+    """The bottom rung: a stored result with no names beats a dead job and a 503."""
+    worker = build_worker(tmp_path, "botonly.db", BotOnlyHistoryMediaWiki(), RefusingWikiWho())
+
+    assert worker.run_once() is True
+    result = stored(worker)
+
+    assert result is not None
+    assert result.contributors == []
+    assert result.distinct_contributors == 45
+    assert worker.repository.stats() == {"ready": 1}
 
 
 def test_worker_requeues_current_revision_instead_of_computing_stale_one(

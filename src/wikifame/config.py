@@ -47,6 +47,7 @@ class Settings:
     candidate_pool_size: int
     minimum_tokens: int
     minimum_share: float
+    top_editor_max_revisions: int
     worker_poll_seconds: float
     worker_lease_seconds: int
     worker_max_attempts: int
@@ -65,7 +66,10 @@ class Settings:
                 "WIKIFAME_USER_AGENT",
                 "WikiFame/0.1 (https://github.com/schiste/wikifame)",
             ),
-            algorithm_version=os.getenv("ALGORITHM_VERSION", "surviving-tokens-v1"),
+            # v2 adds the edit-count fallback below the token metric (ADR-0005). The name
+            # dropped "surviving-tokens" because that is now one rung of a ladder rather
+            # than the whole policy.
+            algorithm_version=os.getenv("ALGORITHM_VERSION", "attribution-ladder-v2"),
             # "*" serves every wiki WikiWho covers, on demand. Scheduled bulk work is
             # opted into separately so universal serving cannot imply universal crawling.
             supported_wikis=_csv(os.getenv("SUPPORTED_WIKIS", ALL_WIKIS)),
@@ -92,6 +96,12 @@ class Settings:
             candidate_pool_size=int(os.getenv("CANDIDATE_POOL_SIZE", "50")),
             minimum_tokens=int(os.getenv("MINIMUM_TOKENS", "20")),
             minimum_share=float(os.getenv("MINIMUM_SHARE", "0.01")),
+            # The edit-count fallback walks the history 500 revisions per request, so
+            # this is a budget of ten calls. It only ever runs for a page the token
+            # metric could not rank, which is a short page far more often than a long
+            # one; a history past this length is left unranked rather than ranked from
+            # its most recent slice.
+            top_editor_max_revisions=int(os.getenv("TOP_EDITOR_MAX_REVISIONS", "5000")),
             worker_poll_seconds=float(os.getenv("WORKER_POLL_SECONDS", "2")),
             worker_lease_seconds=int(os.getenv("WORKER_LEASE_SECONDS", "300")),
             worker_max_attempts=int(os.getenv("WORKER_MAX_ATTEMPTS", "8")),

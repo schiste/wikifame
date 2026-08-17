@@ -213,9 +213,7 @@ def test_the_box_holds_its_space_from_the_first_frame() -> None:
         "runCountPlaceholder("
     )
 
-    driver = GADGET_SOURCE.split("async function runCountPlaceholder(", 1)[1].split(
-        "\n\t}", 1
-    )[0]
+    driver = GADGET_SOURCE.split("async function runCountPlaceholder(", 1)[1].split("\n\t}", 1)[0]
     # Inserted before the first await, so the space is reserved in the same frame the
     # gadget runs rather than one timer later.
     assert driver.index("insertBelowSubtitle( box )") < driver.index("await")
@@ -297,6 +295,47 @@ def test_a_failed_request_is_told_apart_from_one_still_computing() -> None:
     # The hook still carries real data, so it must not fire for a placeholder.
     fired = summary.split("mw.hook( 'wikifame.summary' ).fire(", 1)[1]
     assert "outcome.data" in fired.split("\n", 1)[0]
+
+
+def test_only_the_token_metric_earns_the_authorship_wording() -> None:
+    """Edit counts rank a different thing, so they must not inherit "written by".
+
+    The test is on the direction of the comparison. Written the other way round — an
+    EDIT_COUNT_METRIC constant — a metric added to the API after this file ships would
+    fall through to the strongest claim the gadget has, and call whoever it names an
+    author on the strength of a string it has never seen.
+    """
+    assert "SURVIVING_TEXT_METRIC = 'wikiwho-surviving-alphanumeric-tokens'" in GADGET_SOURCE
+    normalize = GADGET_SOURCE.split("function normalizeContributionData(", 1)[1].split("\n\t}", 1)[
+        0
+    ]
+    assert "wroteTheText: data.metric === SURVIVING_TEXT_METRIC" in normalize
+
+    summary = GADGET_SOURCE.split("function buildArticleSummary(", 1)[1].split("\n\t}", 1)[0]
+    # Every place the wording differs reads the same flag, so the three cannot drift apart.
+    assert "namedByEditCount ? 'wikifame-tooltip-edits' : 'wikifame-tooltip'" in summary
+    assert (
+        "namedByEditCount ? 'wikifame-summary-prefix-edits' : 'wikifame-summary-prefix'" in summary
+    )
+    assert "createEditorLink( editor, namedByEditCount )" in summary
+
+    link = GADGET_SOURCE.split("function createEditorLink(", 1)[1].split("\n\t}", 1)[0]
+    assert "byEditCount ? 'wikifame-share-edits' : 'wikifame-share'" in link
+
+
+def test_a_box_with_no_names_makes_no_claim_about_where_names_came_from() -> None:
+    """The bottom rung shows a count and nothing else, so both tooltips are wrong there.
+
+    A page WikiWho refused outright reaches this branch, and the default tooltip would
+    then credit WikiWho with an analysis it declined to perform. The weaker wording is
+    equally wrong: it describes a ranking the reader is not being shown.
+    """
+    summary = GADGET_SOURCE.split("function buildArticleSummary(", 1)[1].split("\n\t}", 1)[0]
+    assert "var namedByEditCount = topEditors.length > 0 && !data.wroteTheText;" in summary
+    described = summary.split("if ( topEditors.length ) {", 1)[1]
+    assert "wikifame-tooltip" in described.split("\n\t\t}", 1)[0]
+    # The computation date is true whatever was ranked, so it survives on its own.
+    assert "box.title = tooltip.join( ' ' );" in summary
 
 
 def test_gadget_localises_plurals_and_lists_rather_than_hardcoding_french() -> None:

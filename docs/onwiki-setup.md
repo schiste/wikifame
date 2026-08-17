@@ -131,14 +131,17 @@ Available keys, with the built-in English text:
 | Key | Default |
 | --- | --- |
 | `wikifame-summary-prefix` | `Article written by ` |
+| `wikifame-summary-prefix-edits` | `Article most edited by ` |
 | `wikifame-people` | `{{PLURAL:$1|$1 person|$1 people}}` |
 | `wikifame-others` | `{{PLURAL:$1|$1 other person|$1 other people}}` |
 | `wikifame-at-least` | `at least $1` |
 | `wikifame-many-people` | `many people` |
 | `wikifame-user-title` | `View the user page of $1` |
 | `wikifame-share` | `$1 of the currently visible tokens` |
+| `wikifame-share-edits` | `$1 of the edits to this page` |
 | `wikifame-history-title` | `View the full page history` |
 | `wikifame-tooltip` | `Main authors of the text according to WikiWho.` |
+| `wikifame-tooltip-edits` | `Accounts that edited this page most, from its history. The text itself could not be analysed.` |
 | `wikifame-computed` | `Data computed on $1.` |
 | `wikifame-history-intro` | `Each line is one version of the article, showing who changed it.` |
 | `wikifame-history-help` | `To get started, read $1 or practise in $2.` |
@@ -146,6 +149,12 @@ Available keys, with the built-in English text:
 | `wikifame-history-sandbox-label` | `the sandbox` |
 | `wikifame-history-edit` | `You can also $1.` |
 | `wikifame-history-edit-label` | `edit this article directly` |
+
+The three `-edits` keys are used only when the text itself could not be analysed and the names come
+from the page history instead — who edited most, rather than who wrote what you are reading. They
+are worded as a weaker claim on purpose. If you override them, keep them weaker than their
+counterparts: the same names under `wikifame-summary-prefix` would credit people for text they may
+never have written.
 
 If you do override something:
 

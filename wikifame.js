@@ -41,6 +41,10 @@
 	var CONFIG_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 	var CONTENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 	var PENDING_RETRY_DELAYS_MS = [ 3000, 10000 ];
+	// The API answers with the metric that produced the names. Only this one measures who
+	// wrote the text on screen, so only this one earns "written by"; any other metric,
+	// including one added after this file ships, gets the weaker wording it can support.
+	var SURVIVING_TEXT_METRIC = 'wikiwho-surviving-alphanumeric-tokens';
 
 	// The box is drawn before the answer exists, not after. Nothing reaches this gadget
 	// in under roughly 280 ms — it opens a fresh connection to another host, so every
@@ -70,14 +74,19 @@
 	var MESSAGES = {
 		en: {
 			'wikifame-summary-prefix': 'Article written by ',
+			// A different measurement deserves a different claim: these accounts edited
+			// the page most often, which is not the same as having written what is on it.
+			'wikifame-summary-prefix-edits': 'Article most edited by ',
 			'wikifame-people': '{{PLURAL:$1|$1 person|$1 people}}',
 			'wikifame-others': '{{PLURAL:$1|$1 other person|$1 other people}}',
 			'wikifame-at-least': 'at least $1',
 			'wikifame-many-people': 'many people',
 			'wikifame-user-title': 'View the user page of $1',
 			'wikifame-share': '$1 of the currently visible tokens',
+			'wikifame-share-edits': '$1 of the edits to this page',
 			'wikifame-history-title': 'View the full page history',
 			'wikifame-tooltip': 'Main authors of the text according to WikiWho.',
+			'wikifame-tooltip-edits': 'Accounts that edited this page most, from its history. The text itself could not be analysed.',
 			'wikifame-computed': 'Data computed on $1.',
 			'wikifame-history-intro': 'Each line is one version of the article, showing who changed it.',
 			'wikifame-history-help': 'To get started, read $1 or practise in $2.',
@@ -88,14 +97,17 @@
 		},
 		fr: {
 			'wikifame-summary-prefix': 'Article rédigé par ',
+			'wikifame-summary-prefix-edits': 'Article le plus modifié par ',
 			'wikifame-people': '{{PLURAL:$1|$1 personne|$1 personnes}}',
 			'wikifame-others': '{{PLURAL:$1|$1 autre personne|$1 autres personnes}}',
 			'wikifame-at-least': 'au moins $1',
 			'wikifame-many-people': 'de nombreuses personnes',
 			'wikifame-user-title': 'Voir la page utilisateur de $1',
 			'wikifame-share': '$1 des tokens actuellement visibles',
+			'wikifame-share-edits': '$1 des modifications de la page',
 			'wikifame-history-title': 'Voir l’historique complet de l’article',
 			'wikifame-tooltip': 'Principaux contributeurs du texte selon WikiWho.',
+			'wikifame-tooltip-edits': 'Comptes ayant le plus modifié cette page, d’après son historique. Le texte lui-même n’a pas pu être analysé.',
 			'wikifame-computed': 'Données calculées le $1.',
 			'wikifame-history-intro': 'Chaque ligne correspond à une version de l’article et indique qui l’a modifiée.',
 			'wikifame-history-help': 'Pour commencer, consultez $1 ou entraînez-vous dans $2.',
@@ -835,6 +847,9 @@
 			computedAt: data.computed_at,
 			humanCount: data.distinct_contributors,
 			limited: Boolean( data.count_limited ),
+			// Which rung of the ladder answered. The names alone do not say whether they
+			// wrote the text or merely edited it most, and the sentence has to.
+			wroteTheText: data.metric === SURVIVING_TEXT_METRIC,
 			topEditors: data.contributors.slice( 0, 3 ).map( function ( editor ) {
 				return {
 					share: Number( editor.share ),
@@ -880,6 +895,11 @@
 		var topEditors = data.topEditors;
 		var otherCount = Math.max( 0, data.humanCount - topEditors.length );
 		var computedDate = new Date( data.computedAt );
+		// Only a named ranking can be weaker than "written by". With no names the
+		// sentence is about the count alone, which the edit history and the token
+		// analysis agree on, so it keeps the ordinary wording.
+		var namedByEditCount = topEditors.length > 0 && !data.wroteTheText;
+		var tooltip = [];
 		var nodes;
 
 		if ( data.humanCount < 1 ) {
@@ -889,18 +909,30 @@
 		box.id = ARTICLE_SUMMARY_ID;
 		box.className = 'wikifame wikifame--article';
 		box.setAttribute( 'role', 'note' );
-		box.title = mw.message( 'wikifame-tooltip' ).text();
+		// Both tooltips describe a ranking, so neither belongs on a box that shows none.
+		// A page WikiWho refused can still reach this branch, and saying its names come
+		// from WikiWho would then credit a service that never saw the article.
+		if ( topEditors.length ) {
+			tooltip.push( mw.message(
+				namedByEditCount ? 'wikifame-tooltip-edits' : 'wikifame-tooltip'
+			).text() );
+		}
 		if ( !Number.isNaN( computedDate.getTime() ) && dateFormatter ) {
-			box.title += ' ' + mw.message(
+			tooltip.push( mw.message(
 				'wikifame-computed',
 				dateFormatter.format( computedDate )
-			).text();
+			).text() );
 		}
+		box.title = tooltip.join( ' ' );
 
-		box.append( document.createTextNode( mw.message( 'wikifame-summary-prefix' ).text() ) );
+		box.append( document.createTextNode( mw.message(
+			namedByEditCount ? 'wikifame-summary-prefix-edits' : 'wikifame-summary-prefix'
+		).text() ) );
 
 		if ( topEditors.length ) {
-			nodes = topEditors.map( createEditorLink );
+			nodes = topEditors.map( function ( editor ) {
+				return createEditorLink( editor, namedByEditCount );
+			} );
 			if ( otherCount > 0 ) {
 				nodes.push( createHistoryCountLink( otherCount, data.limited, true ) );
 			}
@@ -952,7 +984,7 @@
 		} );
 	}
 
-	function createEditorLink( editor ) {
+	function createEditorLink( editor, byEditCount ) {
 		var link = document.createElement( 'a' );
 		var name = editor.username.replace( /_/g, ' ' );
 		var title = new mw.Title( editor.username, 2 );
@@ -961,8 +993,11 @@
 		link.textContent = name;
 		link.title = mw.message( 'wikifame-user-title', name ).text();
 		if ( Number.isFinite( editor.share ) && percentageFormatter ) {
+			// The share is a share of whatever was ranked: of the visible tokens, or of
+			// the page's edits. Naming the wrong one turns a true percentage into a
+			// false statement.
 			link.title += ' — ' + mw.message(
-				'wikifame-share',
+				byEditCount ? 'wikifame-share-edits' : 'wikifame-share',
 				percentageFormatter.format( editor.share )
 			).text();
 		}

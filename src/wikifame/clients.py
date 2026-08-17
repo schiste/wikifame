@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import date
@@ -27,6 +28,20 @@ class PageMetadata:
 class EditorCount:
     count: int
     limited: bool
+
+
+@dataclass(frozen=True)
+class EditorHistory:
+    """Per-account edit counts for one page, and whether the whole history was read.
+
+    `complete` is False when the walk stopped at its revision budget. The counts are
+    then those of the most recent revisions only, which is not what "most edits" means,
+    so the caller is expected to decline to name anyone rather than rank a window.
+    """
+
+    counts: Counter[int]
+    revisions: int
+    complete: bool
 
 
 def _batched(values: Iterable[int], size: int) -> Iterable[list[int]]:
@@ -125,6 +140,46 @@ class MediaWikiClient:
             if not continuation:
                 return count
         raise RetryableUpstreamError("Pagination des bots anormalement longue")
+
+    def get_editor_history(self, wiki: str, page_id: int, max_revisions: int) -> EditorHistory:
+        """Count edits per account by walking the page history.
+
+        The Action API is the same one already used everywhere here, so this adds no
+        external dependency: XTools computes the same ranking, but reaching for it would
+        put a second service in the job path for a number MediaWiki already holds.
+
+        Revisions with no `userid` are IPs, or authorship that has been suppressed.
+        Neither can be named, so they are counted in the total and in nobody's tally.
+        """
+        counts: Counter[int] = Counter()
+        revisions = 0
+        continuation: dict[str, Any] = {}
+
+        while revisions < max_revisions:
+            data = self._action(
+                wiki,
+                {
+                    "action": "query",
+                    "pageids": page_id,
+                    "prop": "revisions",
+                    "rvprop": "ids|user|userid",
+                    "rvlimit": "max",
+                    **continuation,
+                },
+            )
+            pages = data.get("query", {}).get("pages", [])
+            if not pages:
+                break
+            for revision in pages[0].get("revisions", []):
+                revisions += 1
+                user_id = int(revision.get("userid") or 0)
+                if user_id > 0:
+                    counts[user_id] += 1
+            continuation = data.get("continue", {})
+            if not continuation:
+                return EditorHistory(counts=counts, revisions=revisions, complete=True)
+
+        return EditorHistory(counts=counts, revisions=revisions, complete=False)
 
     def resolve_users(self, wiki: str, user_ids: Iterable[int]) -> dict[int, ResolvedUser]:
         users: dict[int, ResolvedUser] = {}

@@ -33,6 +33,44 @@ def candidate_user_ids(counts: Counter[str], limit: int) -> list[int]:
     ]
 
 
+def select_top_editors(
+    counts: Counter[int],
+    total_revisions: int,
+    users: Mapping[int, ResolvedUser],
+    limit: int = 3,
+) -> list[dict[str, Any]]:
+    """Rank accounts by how often they edited the page, for pages tokens cannot rank.
+
+    The exclusion rule is not reimplemented here: `should_highlight_contributor` is the
+    same function the token path calls, so bots, temporary accounts and missing users
+    disappear from both rankings for the same reason and at the same time. Only the
+    ranking differs, which is exactly what the two metrics disagree about.
+
+    There is no minimum-share gate, unlike the token path. A share of the edits is not a
+    share of the text, so reusing the 1% figure would import a threshold that was chosen
+    against a different measurement.
+    """
+    editors: list[dict[str, Any]] = []
+    if total_revisions <= 0:
+        return editors
+
+    for user_id, edit_count in counts.most_common():
+        user = users.get(user_id)
+        if user is None or not should_highlight_contributor(user):
+            continue
+        editors.append(
+            {
+                "user_id": user.user_id,
+                "username": user.username,
+                "edit_count": edit_count,
+                "share": round(edit_count / total_revisions, 4),
+            }
+        )
+        if len(editors) == limit:
+            break
+    return editors
+
+
 def select_contributors(
     counts: Counter[str],
     total_tokens: int,

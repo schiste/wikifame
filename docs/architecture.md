@@ -88,7 +88,12 @@ discarding the last known result; it does not require changing the storage ident
 Changing any attribution rule that can affect output requires a new `ALGORITHM_VERSION`.
 This prevents an old response from being confused with a new interpretation of contribution.
 
-## Attribution policy (`surviving-tokens-v1`)
+## Attribution policy (`attribution-ladder-v2`)
+
+Three rungs are tried in order, each claiming strictly less than the one above. The `metric` field
+of every result says which one answered, and the gadget words its sentence from that field.
+
+### Rung 1 — surviving tokens (`wikiwho-surviving-alphanumeric-tokens`)
 
 - Count WikiWho tokens containing at least one Unicode letter or number.
 - Rank origin editors by count of tokens surviving in the requested revision.
@@ -96,6 +101,33 @@ This prevents an old response from being confused with a new interpretation of c
 - Permanently exclude bots, temporary accounts, missing users, IPs, and anonymous actors from
   the top three.
 - Require at least 20 surviving tokens and 1% of the countable tokens.
+
+This metric recognizes originators of currently visible wikitext. It does not measure research,
+review, maintenance, media work, reverted contributions, or the quality of an edit.
+
+### Rung 2 — edit counts (`mediawiki-revision-count`)
+
+Reached when rung 1 names nobody: either WikiWho refuses the page with a permanent `400`, or it
+answers about a page too short for anyone to clear the thresholds. Both are the same nothing to a
+reader.
+
+- Count revisions per account by walking the page history through the Action API.
+- Exclude exactly the same accounts as rung 1, through the same shared rule — only the ordering
+  differs, which is the one thing the two metrics disagree about.
+- Apply no minimum share: a share of the edits is not a share of the text, so the 1% figure would
+  be imported from a different measurement.
+- Leave a history longer than `TOP_EDITOR_MAX_REVISIONS` unranked. “Most edits” computed over the
+  newest slice of a history is a guess.
+
+Edit counts are weaker evidence than surviving text, so the interface says “most edited by”, never
+“written by”. See [ADR-0005](decisions/0005-attribution-ladder.md).
+
+### Rung 3 — the count alone
+
+No names. The aggregate is still served, and the sentence is about it.
+
+### The aggregate count
+
 - Keep anonymous and temporary actors in the historical distinct-contributor count.
 - Subtract accounts that currently hold the MediaWiki `bot` right from that total.
 
@@ -103,9 +135,6 @@ This prevents an old response from being confused with a new interpretation of c
 MediaWiki history-count endpoint does not provide a reliable temporary-account subtotal. The UI
 therefore never names temporary accounts, while the linked aggregate can still include them.
 See [ADR-0001](decisions/0001-attribution-policy.md).
-
-This metric recognizes originators of currently visible wikitext. It does not measure research,
-review, maintenance, media work, reverted contributions, or the quality of an edit.
 
 ## Priority and load control
 
