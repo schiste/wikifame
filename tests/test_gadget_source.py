@@ -167,8 +167,9 @@ def test_both_views_share_one_cached_attribution_request() -> None:
         "\n\tasync function", 1
     )[0]
     assert "contributionData( PENDING_RETRY_DELAYS_MS )" in summary
-    # Caching belongs to the shared helper now, not to one of the two callers.
-    assert "readCache" not in summary
+    # The article view peeks at the cache before drawing, because an answer already in
+    # hand needs no placeholder. Writing it back stays with the shared helper.
+    assert "readCache( getCacheKey(), CLIENT_CACHE_MAX_AGE_MS )" in summary
     assert "writeCache" not in summary
 
     shared = GADGET_SOURCE.split("async function contributionData(", 1)[1].split("\n\t}", 1)[0]
@@ -222,6 +223,25 @@ def test_the_box_holds_its_space_from_the_first_frame() -> None:
     assert "COUNT_ROLL_SETTLE_MS - ( Date.now() - startedAt )" in driver
 
 
+def test_a_cached_answer_skips_the_placeholder_entirely() -> None:
+    """sessionStorage answers with no network, so a placeholder would invent the wait.
+
+    Drawing first and reading the cache afterwards costs a frame of rolling digits on
+    every revisit — the common path for anyone moving between an article and its
+    history — to explain a wait that never happened.
+    """
+    summary = GADGET_SOURCE.split("async function addArticleSummary(", 1)[1].split(
+        "\n\tasync function", 1
+    )[0]
+    # The cache is consulted before the driver is ever started.
+    assert summary.index("readCache( getCacheKey(), CLIENT_CACHE_MAX_AGE_MS )") < summary.index(
+        "runCountPlaceholder("
+    )
+    # And the request, with its placeholder, runs only when the cache came up empty.
+    guard = summary.split("readCache( getCacheKey(), CLIENT_CACHE_MAX_AGE_MS );", 1)[1]
+    assert guard.lstrip().startswith("if ( !outcome.data ) {")
+
+
 def test_turning_digits_are_never_announced_or_left_spinning() -> None:
     """One digit per frame would make a screen reader unusable.
 
@@ -267,8 +287,11 @@ def test_a_failed_request_is_told_apart_from_one_still_computing() -> None:
     )[0]
     assert "outcome.failed" in summary
     assert "removeArticleSummary()" in summary
-    # A pending result keeps whatever the placeholder settled on.
-    assert summary.index("if ( outcome.failed ) {") < summary.index("if ( !outcome.data ) {")
+    # A pending result keeps whatever the placeholder settled on. Read the decisions
+    # taken once the request has resolved: the guard that skips the request when the
+    # cache already answered tests the same field earlier, for an unrelated reason.
+    decisions = summary.split("await Promise.all(", 1)[1]
+    assert decisions.index("if ( outcome.failed ) {") < decisions.index("if ( !outcome.data ) {")
     # The real sentence replaces the placeholder in place rather than joining it.
     assert "existing.replaceWith( summary )" in summary
     # The hook still carries real data, so it must not fire for a placeholder.

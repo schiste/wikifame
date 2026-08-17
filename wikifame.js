@@ -707,8 +707,8 @@
 	/**
 	 * Render the attribution sentence, filling it in as the answer arrives.
 	 *
-	 * The request starts before anything is drawn, so the placeholder only ever appears
-	 * when the wait is real. A page the API cannot serve — an unsupported wiki, a network
+	 * The placeholder appears only when the wait is real: a cached answer skips it and
+	 * renders straight away. A page the API cannot serve — an unsupported wiki, a network
 	 * failure — must leave no trace, which is why an error is told apart from a result
 	 * that is merely still being computed.
 	 */
@@ -723,16 +723,24 @@
 			return;
 		}
 
-		pending = contributionData( PENDING_RETRY_DELAYS_MS ).then( function ( value ) {
-			outcome.data = value;
-		}, function ( error ) {
-			mw.log.warn( 'WikiFame: attribution unavailable', error );
-			outcome.failed = true;
-		} ).then( function () {
-			outcome.done = true;
-		} );
+		// Read the session cache before drawing anything. A cached answer needs no
+		// network, so there is no wait for a placeholder to explain — and drawing one
+		// anyway would invent an eighty-millisecond wait on every revisit, which is the
+		// common path for anyone moving between an article and its history.
+		outcome.data = readCache( getCacheKey(), CLIENT_CACHE_MAX_AGE_MS );
 
-		await Promise.all( [ pending, runCountPlaceholder( startedAt, outcome ) ] );
+		if ( !outcome.data ) {
+			pending = contributionData( PENDING_RETRY_DELAYS_MS ).then( function ( value ) {
+				outcome.data = value;
+			}, function ( error ) {
+				mw.log.warn( 'WikiFame: attribution unavailable', error );
+				outcome.failed = true;
+			} ).then( function () {
+				outcome.done = true;
+			} );
+
+			await Promise.all( [ pending, runCountPlaceholder( startedAt, outcome ) ] );
+		}
 
 		// An error is not a slow answer: an unsupported wiki must not be left claiming
 		// that many people wrote the article.
