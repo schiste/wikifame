@@ -36,6 +36,7 @@ Constraints on rung 2:
 - Exclusion is not reimplemented. Both rankings call the same `should_highlight_contributor`, so
   bots, temporary accounts and missing users are unnameable through either path, and can never
   diverge. Only the ordering differs, which is the one thing the two metrics disagree about.
+  ([ADR-0006](0006-bot-exclusion.md) later widened that shared rule; it stayed shared.)
 - No minimum-share gate. A share of the edits is not a share of the text, so reusing the 1% figure
   would import a threshold chosen against a different measurement.
 - Revisions with no `userid` are IPs or suppressed authorship. They count toward the total and

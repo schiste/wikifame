@@ -11,15 +11,21 @@ from wikifame.policy import ResolvedUser
 from wikifame.runtime import build_runtime
 from wikifame.worker import Worker
 
-# 4 and 5 exist so the fallback can be asked to drop them: the same accounts the token
-# path would never name must be unnameable through the edit-count path too.
+# 4 to 7 exist so the fallback can be asked to drop them: the same accounts the token
+# path would never name must be unnameable through the edit-count path too. 6 and 7 are
+# the two bots no local flag identifies (ADR-0006) — one known to CentralAuth, one known
+# to nothing but its name.
 ACCOUNTS = {
     1: ResolvedUser(1, "Alice", frozenset()),
     2: ResolvedUser(2, "Bob", frozenset()),
     3: ResolvedUser(3, "Charlie", frozenset()),
     4: ResolvedUser(4, "Botrix", frozenset({"bot"})),
     5: ResolvedUser(5, "~2026-1", frozenset()),
+    6: ResolvedUser(6, "Loveless", frozenset({"user", "autoconfirmed"})),
+    7: ResolvedUser(7, "Gallicbot", frozenset({"user"})),
 }
+
+GLOBAL_GROUPS = {"Loveless": frozenset({"local-bot"})}
 
 
 class FakeMediaWiki:
@@ -28,6 +34,9 @@ class FakeMediaWiki:
 
     def resolve_users(self, _wiki: str, user_ids: list[int]) -> dict[int, ResolvedUser]:
         return {user_id: ACCOUNTS[user_id] for user_id in user_ids}
+
+    def global_groups(self, _wiki: str, username: str) -> frozenset[str]:
+        return GLOBAL_GROUPS.get(username, frozenset())
 
     def get_editor_count(self, _wiki: str, _title: str) -> EditorCount:
         return EditorCount(47, False)
@@ -75,6 +84,12 @@ class LongHistoryMediaWiki(FakeMediaWiki):
 class BotOnlyHistoryMediaWiki(FakeMediaWiki):
     def get_editor_history(self, _wiki: str, _page_id: int, _max_revisions: int) -> EditorHistory:
         return EditorHistory(counts=Counter({4: 12, 5: 3}), revisions=15, complete=True)
+
+
+class UnflaggedBotHistoryMediaWiki(FakeMediaWiki):
+    def get_editor_history(self, _wiki: str, _page_id: int, _max_revisions: int) -> EditorHistory:
+        # The two bots fr.wikipedia flags as ordinary accounts outrank the one human.
+        return EditorHistory(counts=Counter({6: 40, 7: 35, 1: 5}), revisions=80, complete=True)
 
 
 class NewerRevisionMediaWiki(FakeMediaWiki):
@@ -213,6 +228,23 @@ def test_a_page_only_bots_ever_touched_yields_a_count_and_no_names(tmp_path: Pat
     assert result.contributors == []
     assert result.distinct_contributors == 45
     assert worker.repository.stats() == {"ready": 1}
+
+
+def test_bots_the_wiki_does_not_flag_are_still_not_named(tmp_path: Path) -> None:
+    """The two holes ADR-0006 closes, in the rung where they showed up in production.
+
+    `Loveless` is a bot only CentralAuth knows about; `Gallicbot` is flagged nowhere and
+    is caught by its name alone. Both outrank the one human here, and neither is named.
+    """
+    worker = build_worker(
+        tmp_path, "unflagged.db", UnflaggedBotHistoryMediaWiki(), RefusingWikiWho()
+    )
+
+    assert worker.run_once() is True
+    result = stored(worker)
+
+    assert result is not None
+    assert [item["username"] for item in result.contributors] == ["Alice"]
 
 
 def test_worker_requeues_current_revision_instead_of_computing_stale_one(

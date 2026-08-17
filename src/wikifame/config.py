@@ -69,7 +69,7 @@ class Settings:
             # v2 adds the edit-count fallback below the token metric (ADR-0005). The name
             # dropped "surviving-tokens" because that is now one rung of a ladder rather
             # than the whole policy.
-            algorithm_version=os.getenv("ALGORITHM_VERSION", "attribution-ladder-v2"),
+            algorithm_version=os.getenv("ALGORITHM_VERSION", "attribution-ladder-v3"),
             # "*" serves every wiki WikiWho covers, on demand. Scheduled bulk work is
             # opted into separately so universal serving cannot imply universal crawling.
             supported_wikis=_csv(os.getenv("SUPPORTED_WIKIS", ALL_WIKIS)),

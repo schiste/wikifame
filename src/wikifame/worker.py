@@ -161,6 +161,9 @@ class Worker:
         contributors: list[Any] = []
         total_tokens = 0
 
+        def global_groups(username: str) -> frozenset[str]:
+            return self.mediawiki.global_groups(lease.wiki, username)
+
         try:
             tokens = self.wikiwho.fetch_revision(lease.wiki, lease.revision_id)
             counts, total_tokens = count_tokens(tokens)
@@ -173,6 +176,7 @@ class Worker:
                 users=users,
                 minimum_tokens=self.settings.minimum_tokens,
                 minimum_share=self.settings.minimum_share,
+                global_groups=global_groups,
             )
         except PermanentDataError as error:
             # Only WikiWho's refusal is caught here. A missing page raises the same class
@@ -207,6 +211,7 @@ class Worker:
                 counts=history.counts,
                 total_revisions=history.revisions,
                 users=users,
+                global_groups=global_groups,
             ),
             total_tokens,
             METRIC_EDITS,

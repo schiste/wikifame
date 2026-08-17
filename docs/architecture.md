@@ -88,7 +88,7 @@ discarding the last known result; it does not require changing the storage ident
 Changing any attribution rule that can affect output requires a new `ALGORITHM_VERSION`.
 This prevents an old response from being confused with a new interpretation of contribution.
 
-## Attribution policy (`attribution-ladder-v2`)
+## Attribution policy (`attribution-ladder-v3`)
 
 Three rungs are tried in order, each claiming strictly less than the one above. The `metric` field
 of every result says which one answered, and the gadget words its sentence from that field.
@@ -99,7 +99,7 @@ of every result says which one answered, and the gadget words its sentence from 
 - Rank origin editors by count of tokens surviving in the requested revision.
 - Resolve numeric WikiWho editor IDs to current Wikimedia usernames.
 - Permanently exclude bots, temporary accounts, missing users, IPs, and anonymous actors from
-  the top three.
+  the top three, by the rule below.
 - Require at least 20 surviving tokens and 1% of the countable tokens.
 
 This metric recognizes originators of currently visible wikitext. It does not measure research,
@@ -126,10 +126,27 @@ Edit counts are weaker evidence than surviving text, so the interface says “mo
 
 No names. The aggregate is still served, and the sentence is about it.
 
+### Who may be named
+
+One rule, `should_highlight_contributor`, shared by both rungs. An account is excluded when it is
+missing, when its name starts with `~`, when a local group contains `bot`, when a CentralAuth
+global group contains `bot`, or when its username ends in `bot`.
+
+The last two exist because the local flag misses real bots in both directions: `Addbot` is a bot
+by global group only, and `Gallicbot` carries no flag anywhere. The name rule is a guess about
+identity, and it excludes people called Talbot or Abbot as the accepted price of catching the
+unflagged ones. Checks run cheapest-first, and the global lookup — one CentralAuth request per
+account, cached per process — is reached only for accounts nothing else has excluded.
+See [ADR-0006](decisions/0006-bot-exclusion.md).
+
 ### The aggregate count
 
 - Keep anonymous and temporary actors in the historical distinct-contributor count.
 - Subtract accounts that currently hold the MediaWiki `bot` right from that total.
+
+The count uses the local bot right alone, not the wider rule above: it is a server-side filter,
+and widening it would mean enumerating every contributor of every page. So the count can include
+an unflagged bot the names exclude.
 
 “Exclude temporary accounts” refers to public highlighting, not the aggregate count. The current
 MediaWiki history-count endpoint does not provide a reliable temporary-account subtotal. The UI

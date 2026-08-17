@@ -5,6 +5,7 @@ from collections.abc import Iterable, Mapping
 from typing import Any
 
 from wikifame.policy import (
+    GlobalGroupLookup,
     ResolvedUser,
     is_countable_token,
     is_registered_editor,
@@ -37,6 +38,7 @@ def select_top_editors(
     counts: Counter[int],
     total_revisions: int,
     users: Mapping[int, ResolvedUser],
+    global_groups: GlobalGroupLookup | None = None,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
     """Rank accounts by how often they edited the page, for pages tokens cannot rank.
@@ -56,7 +58,7 @@ def select_top_editors(
 
     for user_id, edit_count in counts.most_common():
         user = users.get(user_id)
-        if user is None or not should_highlight_contributor(user):
+        if user is None or not should_highlight_contributor(user, global_groups):
             continue
         editors.append(
             {
@@ -77,6 +79,7 @@ def select_contributors(
     users: Mapping[int, ResolvedUser],
     minimum_tokens: int,
     minimum_share: float,
+    global_groups: GlobalGroupLookup | None = None,
     limit: int = 3,
 ) -> list[dict[str, Any]]:
     contributors: list[dict[str, Any]] = []
@@ -86,11 +89,14 @@ def select_contributors(
     for editor, token_count in counts.most_common():
         if not is_registered_editor(editor):
             continue
-        user = users.get(int(editor))
-        if user is None or not should_highlight_contributor(user):
-            continue
         share = token_count / total_tokens
         if token_count < minimum_tokens or share < minimum_share:
+            continue
+        # The significance gate runs before the exclusion rule, not after: the rule can
+        # cost an HTTP request per account, and an account below the threshold cannot be
+        # named whatever it turns out to be. The set of names is the same either way.
+        user = users.get(int(editor))
+        if user is None or not should_highlight_contributor(user, global_groups):
             continue
         contributors.append(
             {

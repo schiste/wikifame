@@ -17,7 +17,8 @@ For the three highlighted names:
 - count tokens containing at least one Unicode letter or number;
 - rank by surviving-token count in the exact current revision;
 - resolve registered numeric IDs to current usernames;
-- exclude current bots, temporary accounts, missing accounts, IP addresses, and anonymous actors;
+- exclude current bots, temporary accounts, missing accounts, IP addresses, and anonymous actors
+  (what counts as a bot was widened by [ADR-0006](0006-bot-exclusion.md));
 - require at least 20 tokens and a 1% share;
 - show at most three accounts.
 

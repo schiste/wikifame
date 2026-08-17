@@ -27,7 +27,7 @@ calculation remain usable across ordinary edits for `PAGE_FRESHNESS_SECONDS`, 90
   "requested_revision_id": 789,
   "source_revision_id": 456,
   "title": "Exemple",
-  "algorithm_version": "attribution-ladder-v2",
+  "algorithm_version": "attribution-ladder-v3",
   "metric": "wikiwho-surviving-alphanumeric-tokens",
   "contributors": [],
   "distinct_contributors": 47,
@@ -58,7 +58,7 @@ Ready responses use bounded browser caching:
 
 ```http
 Cache-Control: public, max-age=86400, stale-while-revalidate=604800
-X-WikiFame-Algorithm: attribution-ladder-v2
+X-WikiFame-Algorithm: attribution-ladder-v3
 X-WikiFame-Source-Revision: 456
 ```
 
@@ -95,7 +95,7 @@ revision IDs are stable.
   "page_id": 123,
   "revision_id": 456,
   "title": "Exemple",
-  "algorithm_version": "attribution-ladder-v2",
+  "algorithm_version": "attribution-ladder-v3",
   "metric": "wikiwho-surviving-alphanumeric-tokens",
   "contributors": [
     {
@@ -121,7 +121,7 @@ Ready responses use:
 
 ```http
 Cache-Control: public, max-age=31536000, immutable
-X-WikiFame-Algorithm: attribution-ladder-v2
+X-WikiFame-Algorithm: attribution-ladder-v3
 ```
 
 Immutability is safe for v1 because the revision and algorithm version are part of the cache

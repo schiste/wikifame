@@ -4,7 +4,7 @@ from datetime import date
 import httpx
 import pytest
 
-from wikifame.clients import AnalyticsClient, WikiWhoClient
+from wikifame.clients import AnalyticsClient, MediaWikiClient, WikiWhoClient
 from wikifame.errors import PermanentDataError, ResponseTooLargeError, RetryableUpstreamError
 
 
@@ -83,6 +83,39 @@ def test_a_busy_or_broken_wikiwho_is_still_worth_retrying(status: int) -> None:
 
     with pytest.raises(RetryableUpstreamError):
         client.fetch_revision("frwiki", 200)
+    client.close()
+
+
+def test_global_groups_are_read_from_centralauth_and_asked_for_once() -> None:
+    client = MediaWikiClient("tests", 1)
+    asked: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        asked.append(request.url.params["guiuser"])
+        return httpx.Response(
+            200,
+            json={"query": {"globaluserinfo": {"name": "Addbot", "groups": ["local-bot"]}}},
+        )
+
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    assert client.global_groups("frwiki", "Addbot") == frozenset({"local-bot"})
+    assert client.global_groups("frwiki", "Addbot") == frozenset({"local-bot"})
+    assert asked == ["Addbot"]
+    client.close()
+
+
+def test_an_account_centralauth_does_not_know_has_no_global_groups() -> None:
+    client = MediaWikiClient("tests", 1)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"query": {"globaluserinfo": {"missing": True}}})
+
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    assert client.global_groups("frwiki", "Inconnu") == frozenset()
     client.close()
 
 

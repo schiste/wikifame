@@ -15,6 +15,8 @@ from wikifame.errors import PermanentDataError, ResponseTooLargeError, Retryable
 from wikifame.policy import ResolvedUser
 from wikifame.sites import SiteResolver
 
+GLOBAL_GROUP_CACHE_SIZE = 4096
+
 
 @dataclass(frozen=True)
 class PageMetadata:
@@ -58,6 +60,7 @@ class MediaWikiClient:
         resolver: SiteResolver | None = None,
     ) -> None:
         self.resolver = resolver or SiteResolver()
+        self._global_groups: dict[str, frozenset[str]] = {}
         self.client = httpx.Client(
             headers={"User-Agent": user_agent, "Accept": "application/json"},
             timeout=timeout_seconds,
@@ -204,6 +207,38 @@ class MediaWikiClient:
                     missing=bool(item.get("missing") or item.get("invalid")),
                 )
         return users
+
+    def global_groups(self, wiki: str, username: str) -> frozenset[str]:
+        """Return the CentralAuth global groups held by an account.
+
+        `list=users` answers about one wiki only, so a bot flagged globally and never
+        locally comes back with no groups at all (ADR-0006). CentralAuth answers about
+        one account per request, which is why callers ask only about accounts already in
+        contention rather than about the whole candidate pool.
+
+        Results are cached for the life of the process: a worker meets the same handful
+        of prolific bots across thousands of pages.
+        """
+        cached = self._global_groups.get(username)
+        if cached is not None:
+            return cached
+
+        data = self._action(
+            wiki,
+            {
+                "action": "query",
+                "meta": "globaluserinfo",
+                "guiuser": username,
+                "guiprop": "groups",
+            },
+        )
+        info = data.get("query", {}).get("globaluserinfo", {})
+        groups = frozenset(info.get("groups") or ())
+
+        if len(self._global_groups) >= GLOBAL_GROUP_CACHE_SIZE:
+            self._global_groups.clear()
+        self._global_groups[username] = groups
+        return groups
 
     def resolve_titles(self, wiki: str, titles: list[str]) -> list[PageMetadata]:
         pages: list[PageMetadata] = []
