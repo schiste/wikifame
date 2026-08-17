@@ -21,6 +21,9 @@
  *   historyIntroPage  a wikitext page whose parsed HTML replaces the built-in history
  *                     introduction. Images, galleries, Commons video and templates all
  *                     work, because MediaWiki does the parsing and the sanitising.
+ *   count slots       an element of class wikifame-count or wikifame-number in that page
+ *                     receives this article's contributor count, which the page itself
+ *                     cannot hold: it is parsed once and cached for every article.
  *   mw.hook           'wikifame.history' and 'wikifame.summary' fire with the rendered
  *                     element, so arbitrary JavaScript belongs in the reader's own
  *                     common.js rather than in a configuration page.
@@ -517,6 +520,56 @@
 
 		insertBelowSubtitle( box );
 		mw.hook( 'wikifame.history' ).fire( box, wikiConfig );
+
+		// After the box is in the page, never before. The introduction is the reason the
+		// reader is looking, and it must not wait on an API round trip to appear.
+		return fillContributorCount( box );
+	}
+
+	/**
+	 * Put this article's contributor count into any slot the custom content declared.
+	 *
+	 * A wikitext page is parsed on its own and cached for every article, so it cannot
+	 * contain a per-article number. It writes an element of a known class instead, keeps
+	 * plain wording inside it as a fallback, and this replaces that text once the API
+	 * answers. A page that asks for no count triggers no request at all, which is what
+	 * keeps history views free for everyone who does not use this.
+	 */
+	async function fillContributorCount( box ) {
+		var phrases = box.querySelectorAll( '.wikifame-count' );
+		var numbers = box.querySelectorAll( '.wikifame-number' );
+		var data;
+		var phrase;
+
+		if ( !phrases.length && !numbers.length ) {
+			return;
+		}
+
+		try {
+			// No retry here, unlike an article view: a result that is still being computed
+			// should leave the reader's own wording alone rather than rewrite the box under
+			// them ten seconds after they started reading it.
+			data = await contributionData( [] );
+		} catch ( error ) {
+			mw.log.warn( 'WikiFame: contributor count unavailable', error );
+			return;
+		}
+
+		if ( !data || data.humanCount < 1 ) {
+			return;
+		}
+
+		phrase = mw.message( 'wikifame-people', formatNumber( data.humanCount ) ).text();
+		if ( data.limited ) {
+			phrase = mw.message( 'wikifame-at-least', phrase ).text();
+		}
+
+		phrases.forEach( function ( slot ) {
+			slot.textContent = phrase;
+		} );
+		numbers.forEach( function ( slot ) {
+			slot.textContent = formatNumber( data.humanCount );
+		} );
 	}
 
 	/**

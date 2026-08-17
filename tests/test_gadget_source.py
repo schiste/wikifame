@@ -130,6 +130,37 @@ def test_javascript_extension_uses_hooks_instead_of_code_in_configuration() -> N
     assert "new Function" not in GADGET_SOURCE
 
 
+def test_contributor_count_is_injected_because_a_shared_page_cannot_hold_it() -> None:
+    """One wikitext page serves every article, so the number cannot live in it.
+
+    The page declares a slot and keeps its own wording inside it as a fallback; the
+    script replaces that text only once a real number arrives.
+    """
+    body = GADGET_SOURCE.split("async function fillContributorCount(", 1)[1].split("\n\t}", 1)[0]
+    assert "'.wikifame-count'" in body
+    assert "'.wikifame-number'" in body
+    # Replacing text, never markup: a slot is a place to put a number, not an injection point.
+    assert "textContent" in body
+    assert "innerHTML" not in body
+    # The count reuses the translated, plural-aware messages rather than gluing a string.
+    assert "'wikifame-people'" in body
+    assert "'wikifame-at-least'" in body
+
+
+def test_contributor_count_is_opt_in_and_never_rewrites_the_box_late() -> None:
+    body = GADGET_SOURCE.split("async function fillContributorCount(", 1)[1].split("\n\t}", 1)[0]
+    # No slot in the page means no request: a history view costs nothing by default.
+    assert "if ( !phrases.length && !numbers.length ) {" in body
+    # An empty delay list, so a pending result leaves the reader's wording in place.
+    assert "contributionData( [] )" in body
+
+    intro = GADGET_SOURCE.split("async function addHistoryIntroduction(", 1)[1].split(
+        "\n\tasync function", 1
+    )[0]
+    # The introduction is inserted before the count is even requested.
+    assert intro.index("insertBelowSubtitle( box )") < intro.index("fillContributorCount( box )")
+
+
 def test_both_views_share_one_cached_attribution_request() -> None:
     """Reading an article and then its history must not cost two API calls."""
     summary = GADGET_SOURCE.split("async function addArticleSummary(", 1)[1].split(

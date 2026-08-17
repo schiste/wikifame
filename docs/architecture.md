@@ -33,6 +33,12 @@ two `mw.hook` events carry arbitrary JavaScript into the reader's `common.js`. N
 configuration page is executed or treated as markup, which is what keeps it reviewable by reading
 it. See [ADR-0004](decisions/0004-on-wiki-extensibility.md).
 
+That page is parsed once and reused for every article, so per-article values cannot live in it. It
+declares a slot — an element classed `wikifame-count` or `wikifame-number` — whose text the gadget
+replaces with this article's contributor count, keeping the page's own wording as the fallback. A
+page declaring no slot issues no request, so history views stay free unless someone opts in, and
+the count shares the article view's page-keyed session cache rather than adding a second call.
+
 ## Request path
 
 1. The gadget requests `GET /v2/{wiki}/pages/{page_id}?revision_id={revision_id}`.

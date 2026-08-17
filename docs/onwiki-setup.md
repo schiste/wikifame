@@ -200,6 +200,36 @@ this script — the wiki does the work, and you preview and revert it like any o
   page" — is cached for 24 hours, so create the page *before* pointing at it, or expect up to a
   day's delay in a tab you have already opened.
 
+### Showing the real number of authors
+
+Your page is parsed once and reused for every article, so it cannot contain this article's
+contributor count. Declare a slot instead, and the script fills it in:
+
+```wikitext
+Cet article a été écrit par <span class="wikifame-count">des dizaines de personnes</span>.
+
+<span class="wikifame-number">plusieurs centaines</span> de personnes y ont contribué.
+```
+
+| Class | Becomes |
+| --- | --- |
+| `wikifame-count` | The full localised phrase — `1 234 personnes`, correctly pluralised, prefixed with `au moins` when the count is a lower bound. |
+| `wikifame-number` | Just the formatted number — `1 234` — for when you write the sentence yourself. |
+
+Use as many of each as you like; they all get the same value.
+
+- **Whatever you write inside the element is the fallback.** It stays exactly as written if the
+  article has no result yet, if the wiki is not covered, or if the API is unreachable. So write
+  something that reads well on its own — `des dizaines de personnes`, not `…`, and never leave it
+  empty.
+- **No slot means no request.** A page without either class costs nothing on a history view, which
+  is why this is opt-in rather than always on.
+- **It does not wait.** The box renders first and the number lands a moment later. On an article
+  whose result is still being computed the script does not retry and does not rewrite the box —
+  your fallback wording simply stays.
+- **It is one API call, not two.** The count shares the session cache with the article-view
+  sentence, keyed by page, so reading an article and then opening its history costs one request.
+
 ### JavaScript
 
 Not through the configuration page — a `.json` page that might contain code is a page nobody can
@@ -233,6 +263,7 @@ order:
 | Configuration edits have no effect | Stale `sessionStorage`; open a new tab. Or a key is misspelled — unknown keys are ignored silently. |
 | `historyIntroPage` is set but the built-in text still shows | The page does not exist under any of the three titles tried, or its absence is still cached. Create it, then open a new tab. |
 | Custom content renders but looks wrong | It is your wikitext, parsed as usual. Preview the page on its own; what you see there is what the box gets. Oversized media is constrained by `wikifame.css`, not fixed. |
+| The author count stays on its fallback wording | No result for this article yet — open the article itself once, wait, then come back. Also check the class name: `wikifame-count`, on an element, not a template parameter. |
 
 The attribution sentence appears on normal article views only: not on diffs, not on old revisions,
 not outside the main namespace.
