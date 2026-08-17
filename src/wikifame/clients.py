@@ -240,7 +240,18 @@ class WikiWhoClient:
         }
         try:
             with self.client.stream("GET", url, params=params) as response:
-                if response.status_code in {400, 408, 425, 429} or response.status_code >= 500:
+                # 400 is WikiWho stating a fact about the page, not a hiccup: the two
+                # forms observed are a rejected namespace and a revision it has no
+                # article for. Neither heals, so retrying costs thirteen seconds and two
+                # more upstream calls to reach the same answer. Nor is it a lag signal —
+                # measured against fr.wikipedia edits seconds old, WikiWho answered 200
+                # with the exact revision every time, so a fresh revision is not the
+                # reason for a 400.
+                if response.status_code == 400:
+                    raise PermanentDataError(
+                        f"WikiWho ne sert pas la révision {revision_id} (HTTP 400)"
+                    )
+                if response.status_code in {408, 425, 429} or response.status_code >= 500:
                     raise RetryableUpstreamError(
                         f"WikiWho HTTP {response.status_code} pour la révision {revision_id}"
                     )

@@ -5,7 +5,7 @@ import httpx
 import pytest
 
 from wikifame.clients import AnalyticsClient, WikiWhoClient
-from wikifame.errors import ResponseTooLargeError
+from wikifame.errors import PermanentDataError, ResponseTooLargeError, RetryableUpstreamError
 
 
 def make_client(payload: dict, max_bytes: int = 10_000) -> WikiWhoClient:
@@ -13,6 +13,17 @@ def make_client(payload: dict, max_bytes: int = 10_000) -> WikiWhoClient:
 
     def handler(_request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, content=json.dumps(payload).encode())
+
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
+    return client
+
+
+def make_failing_client(status: int) -> WikiWhoClient:
+    client = WikiWhoClient("https://example.test", "tests", 1, 10_000)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(status, content=b'{"Error":"nope"}')
 
     client.client.close()
     client.client = httpx.Client(transport=httpx.MockTransport(handler))
@@ -47,6 +58,30 @@ def test_wikiwho_response_size_is_bounded() -> None:
     )
 
     with pytest.raises(ResponseTooLargeError):
+        client.fetch_revision("frwiki", 200)
+    client.close()
+
+
+def test_a_refused_revision_is_permanent_rather_than_retried() -> None:
+    """WikiWho answers 400 to state a fact about the page, and facts do not heal.
+
+    The two forms it sends are a rejected namespace and a revision it has no article
+    for. Retrying either burns the whole thirteen-second chain to arrive at the same
+    answer, and leaves the job marked retryable so it is revived again later.
+    """
+    client = make_failing_client(400)
+
+    with pytest.raises(PermanentDataError):
+        client.fetch_revision("frwiki", 200)
+    client.close()
+
+
+@pytest.mark.parametrize("status", [408, 425, 429, 500, 503])
+def test_a_busy_or_broken_wikiwho_is_still_worth_retrying(status: int) -> None:
+    """Only 400 changed meaning: everything else remains a hiccup to wait out."""
+    client = make_failing_client(status)
+
+    with pytest.raises(RetryableUpstreamError):
         client.fetch_revision("frwiki", 200)
     client.close()
 
