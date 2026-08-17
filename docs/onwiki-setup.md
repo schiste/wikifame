@@ -135,6 +135,7 @@ Available keys, with the built-in English text:
 | `wikifame-people` | `{{PLURAL:$1|$1 person|$1 people}}` |
 | `wikifame-others` | `{{PLURAL:$1|$1 other person|$1 other people}}` |
 | `wikifame-at-least` | `at least $1` |
+| `wikifame-pending` | `Analysing contributions…` |
 | `wikifame-many-people` | `many people` |
 | `wikifame-user-title` | `View the user page of $1` |
 | `wikifame-share` | `$1 of the currently visible tokens` |

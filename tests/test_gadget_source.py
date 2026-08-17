@@ -196,12 +196,11 @@ def test_the_box_holds_its_space_from_the_first_frame() -> None:
     empty page and the placeholder is not conditional on the request being slow.
     """
     body = GADGET_SOURCE.split("function countDisplayState(", 1)[1].split("\n\t}", 1)[0]
-    assert "'rolling'" in body
-    assert "'still'" in body
+    assert "'loading'" in body
     assert "'vague'" in body
     assert "'final'" in body
     # A result that is already in hand outranks every timer.
-    assert body.index("'final'") < body.index("'rolling'")
+    assert body.index("'final'") < body.index("'loading'")
     # The threshold that used to delay the first paint is gone, not merely set to zero.
     assert "COUNT_ROLL_START_MS" not in GADGET_SOURCE
 
@@ -217,16 +216,16 @@ def test_the_box_holds_its_space_from_the_first_frame() -> None:
     # Inserted before the first await, so the space is reserved in the same frame the
     # gadget runs rather than one timer later.
     assert driver.index("insertBelowSubtitle( box )") < driver.index("await")
-    # A motionless box has nothing to redraw, so it waits once instead of every frame.
-    assert "COUNT_ROLL_SETTLE_MS - ( Date.now() - startedAt )" in driver
+    # Nothing redraws while it waits, so it waits once instead of every frame.
+    assert "PENDING_SETTLE_MS - ( Date.now() - startedAt )" in driver
 
 
 def test_a_cached_answer_skips_the_placeholder_entirely() -> None:
     """sessionStorage answers with no network, so a placeholder would invent the wait.
 
-    Drawing first and reading the cache afterwards costs a frame of rolling digits on
-    every revisit — the common path for anyone moving between an article and its
-    history — to explain a wait that never happened.
+    Drawing first and reading the cache afterwards flashes "analysing" on every revisit
+    — the common path for anyone moving between an article and its history — to explain
+    a wait that never happened.
     """
     summary = GADGET_SOURCE.split("async function addArticleSummary(", 1)[1].split(
         "\n\tasync function", 1
@@ -240,38 +239,35 @@ def test_a_cached_answer_skips_the_placeholder_entirely() -> None:
     assert guard.lstrip().startswith("if ( !outcome.data ) {")
 
 
-def test_turning_digits_are_never_announced_or_left_spinning() -> None:
-    """One digit per frame would make a screen reader unusable.
+def test_the_waiting_box_says_what_it_is_doing_and_nothing_about_the_article() -> None:
+    """A placeholder that resembles an answer will be read as one.
 
-    The box is hidden while it turns and exposed only once it says something a reader
-    can act on, and it stops turning long before the thirteen-second retry chain ends.
+    This box used to be the count sentence with four random digits standing in for the
+    number. Under `prefers-reduced-motion` the digits never turned, so the box sat there
+    stating "written by 4827" as a fact — and even in motion it imitated a sentence
+    shape ("written by N people") that a page with names never produces. A loading label
+    reserves the same space and cannot be mistaken for a result.
     """
     pending = GADGET_SOURCE.split("function buildPendingSummary(", 1)[1].split("\n\t}", 1)[0]
+    assert "'wikifame-pending'" in pending
     assert "'aria-busy', 'true'" in pending
-    assert "'aria-hidden', 'true'" in pending
+    # The label is stable and meaningful, so it is announced rather than hidden.
+    assert "aria-hidden" not in pending
+    # Nothing in the waiting box may claim anything about who wrote the article.
+    assert "'wikifame-summary-prefix'" not in pending
+    assert "'wikifame-people'" not in pending
 
     settle = GADGET_SOURCE.split("function settlePendingSummary(", 1)[1].split("\n\t}", 1)[0]
     assert "removeAttribute( 'aria-busy' )" in settle
-    assert "removeAttribute( 'aria-hidden' )" in settle
     # Vague, but a complete and true sentence rather than a truncated one.
     assert "'wikifame-many-people'" in settle
     assert "'wikifame-summary-prefix'" in settle
 
-    assert "prefersReducedMotion()" in GADGET_SOURCE
-    assert "'(prefers-reduced-motion: reduce)'" in GADGET_SOURCE
-    assert "animation: none" in GADGET_STYLES
-    assert "prefers-reduced-motion: reduce" in GADGET_STYLES
-
-    # Less motion means a motionless box, not a missing one: dropping the placeholder
-    # would hand these readers back the page shift everyone else is spared.
-    policy = GADGET_SOURCE.split("function countDisplayState(", 1)[1].split("\n\t}", 1)[0]
-    assert "prefersReducedMotion() ? 'still' : 'rolling'" in policy
-
-
-def test_placeholder_reserves_its_width_so_the_sentence_cannot_jitter() -> None:
-    """Digit widths differ, and the count sits mid-sentence with text beside it."""
-    assert "font-variant-numeric: tabular-nums" in GADGET_STYLES
-    assert "min-width: 4ch" in GADGET_STYLES
+    # No random digits anywhere, and no motion left to opt out of.
+    assert "Math.random()" not in GADGET_SOURCE
+    assert "prefersReducedMotion" not in GADGET_SOURCE
+    assert "@keyframes" not in GADGET_STYLES
+    assert "animation" not in GADGET_STYLES
 
 
 def test_a_failed_request_is_told_apart_from_one_still_computing() -> None:

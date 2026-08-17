@@ -22,35 +22,14 @@
 	margin: 0.12rem 0;
 }
 
-/* Digits stand in for the count until the answer arrives, which is never immediate:
-   the request opens a fresh connection to another host. Tabular figures and a reserved
-   width keep the sentence from reflowing on every frame: without them the varying digit
-   widths shift the text beside them eighty times a second. */
-.wikifame-rolling {
-	display: inline-block;
-	min-width: 4ch;
+/* The box holds its space while the answer is on its way, saying only that the gadget
+   is working. Subdued rather than animated: the label is on screen for a few hundred
+   milliseconds on most visits, and motion there would draw the eye to the one thing on
+   the page that is not yet worth reading. Nothing here moves, so there is no
+   prefers-reduced-motion case to answer. */
+.wikifame-pending {
 	color: var(--color-subtle, #72777d);
-	font-variant-numeric: tabular-nums;
-	animation: wikifame-pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes wikifame-pulse {
-	0%,
-	100% {
-		opacity: 0.45;
-	}
-
-	50% {
-		opacity: 0.85;
-	}
-}
-
-/* The script already stops turning the digits; this covers the frames drawn before
-   the first tick, and any reader whose preference changes mid-request. */
-@media (prefers-reduced-motion: reduce) {
-	.wikifame-rolling {
-		animation: none;
-	}
+	font-style: italic;
 }
 
 /* Parser output is the wiki's own markup dropped into a small note box, so it has to

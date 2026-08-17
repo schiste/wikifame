@@ -50,12 +50,19 @@
 	// in under roughly 280 ms — it opens a fresh connection to another host, so every
 	// reader pays DNS, TCP and TLS however warm the data is — and inserting the box on
 	// arrival would push the article down under a reader who has already started reading.
-	// Rolling stops at COUNT_ROLL_SETTLE_MS because the retry chain can run for thirteen
-	// seconds and nobody watches digits spin that long: the box settles on wording that
-	// is true whatever the answer, and the real sentence replaces it later.
-	var COUNT_ROLL_SETTLE_MS = 2500;
-	var COUNT_ROLL_FRAME_MS = 80;
-	var COUNT_ROLL_DIGITS = 4;
+	//
+	// What it says while it waits is a loading label, not a sentence about the article.
+	// It used to be the count sentence with rolling digits standing in for the number,
+	// which was a mistake twice over: a reader with reduced motion saw four frozen random
+	// digits that read as a fact, and the shape it imitated — "written by N people" — is
+	// not the shape of an answer that has names in it, so it was never the final sentence
+	// in miniature. A label the reader can dismiss as "not the answer yet" costs nothing
+	// and cannot be misread.
+	//
+	// At PENDING_SETTLE_MS the label gives up and states something true whatever the
+	// answer turns out to be, because the retry chain can run for thirteen seconds and a
+	// spinner that long is its own kind of lie.
+	var PENDING_SETTLE_MS = 2500;
 
 	var DEFAULT_CONFIG = {
 		enabled: true,
@@ -80,6 +87,9 @@
 			'wikifame-people': '{{PLURAL:$1|$1 person|$1 people}}',
 			'wikifame-others': '{{PLURAL:$1|$1 other person|$1 other people}}',
 			'wikifame-at-least': 'at least $1',
+			// Says what the gadget is doing, not what the article is. Nothing here may
+			// resemble an answer: it is on screen before one exists.
+			'wikifame-pending': 'Analysing contributions…',
 			'wikifame-many-people': 'many people',
 			'wikifame-user-title': 'View the user page of $1',
 			'wikifame-share': '$1 of the currently visible tokens',
@@ -101,6 +111,7 @@
 			'wikifame-people': '{{PLURAL:$1|$1 personne|$1 personnes}}',
 			'wikifame-others': '{{PLURAL:$1|$1 autre personne|$1 autres personnes}}',
 			'wikifame-at-least': 'au moins $1',
+			'wikifame-pending': 'Analyse des contributions…',
 			'wikifame-many-people': 'de nombreuses personnes',
 			'wikifame-user-title': 'Voir la page utilisateur de $1',
 			'wikifame-share': '$1 des tokens actuellement visibles',
@@ -586,10 +597,9 @@
 	}
 
 	/**
-	 * What the count should look like right now.
+	 * What the box should say right now.
 	 *
-	 * 'rolling' digits turning while the answer is on its way.
-	 * 'still'   the same box, holding its space without the motion.
+	 * 'loading' the gadget is working; the box says so and claims nothing else.
 	 * 'vague'   wording that holds whatever the answer turns out to be.
 	 * 'final'   the real sentence.
 	 *
@@ -597,65 +607,38 @@
 	 * the sentence lands in space already reserved for it rather than shoving the
 	 * article aside three hundred milliseconds in.
 	 *
-	 * Separated from the DOM so the whole timing policy is six readable lines.
+	 * Separated from the DOM so the whole timing policy is five readable lines. Reduced
+	 * motion is not a state here any more: there is nothing left that moves.
 	 */
 	function countDisplayState( elapsedMs, data ) {
 		if ( data ) {
 			return 'final';
 		}
-		if ( elapsedMs < COUNT_ROLL_SETTLE_MS ) {
-			// A reader who asked for less motion still gets the reserved space and the
-			// same wording — they simply get it without the digits churning.
-			return prefersReducedMotion() ? 'still' : 'rolling';
+		if ( elapsedMs < PENDING_SETTLE_MS ) {
+			return 'loading';
 		}
 		return 'vague';
 	}
 
-	function prefersReducedMotion() {
-		return Boolean(
-			window.matchMedia &&
-			window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches
-		);
-	}
-
-	function rollingDigits() {
-		var out = '';
-		var index;
-
-		for ( index = 0; index < COUNT_ROLL_DIGITS; index++ ) {
-			out += String( Math.floor( Math.random() * 10 ) );
-		}
-		return out;
-	}
-
 	/**
-	 * The tier-three sentence with the number still missing.
+	 * A box that says the gadget is working, and nothing about the article.
 	 *
-	 * Hidden from assistive technology while it turns: a screen reader must not announce
-	 * a half-formed sentence, let alone one digit per frame. Both attributes come off
-	 * when the box settles on wording a reader can act on.
+	 * `aria-busy` marks it as in progress; the label itself is stable and meaningful, so
+	 * unlike the digits it replaced there is no reason to hide it from a screen reader.
 	 */
 	function buildPendingSummary() {
 		var box = document.createElement( 'div' );
-		var digits = document.createElement( 'span' );
 
 		box.id = ARTICLE_SUMMARY_ID;
-		box.className = 'wikifame wikifame--article';
+		box.className = 'wikifame wikifame--article wikifame-pending';
 		box.setAttribute( 'role', 'note' );
 		box.setAttribute( 'aria-busy', 'true' );
-		box.setAttribute( 'aria-hidden', 'true' );
-
-		digits.className = 'wikifame-rolling';
-		digits.textContent = rollingDigits();
-
-		box.append( document.createTextNode( mw.message( 'wikifame-summary-prefix' ).text() ) );
-		box.append( digits );
-		box.append( document.createTextNode( '.' ) );
+		box.textContent = mw.message( 'wikifame-pending' ).text();
 		return box;
 	}
 
 	/**
-	 * Stop turning and say something that stays true if the answer never comes.
+	 * Stop promising an answer and say something that stays true if none comes.
 	 *
 	 * This is a refinement, not a correction: vague then precise, never wrong then right.
 	 * That is what separates it from showing a number the API would later contradict.
@@ -663,46 +646,35 @@
 	function settlePendingSummary( box ) {
 		box.textContent = mw.message( 'wikifame-summary-prefix' ).text() +
 			mw.message( 'wikifame-many-people' ).text() + '.';
+		box.classList.remove( 'wikifame-pending' );
 		box.removeAttribute( 'aria-busy' );
-		box.removeAttribute( 'aria-hidden' );
 	}
 
 	/**
-	 * Drive the placeholder until the request resolves, one way or another.
+	 * Hold the box until the request resolves, one way or another.
 	 *
 	 * The box goes in on the first pass, before the first await, so it is part of the
 	 * page from the moment the gadget runs. Exits as soon as `outcome.done` is set.
 	 */
 	async function runCountPlaceholder( startedAt, outcome ) {
 		var box = buildPendingSummary();
-		var digits = box.querySelector( '.wikifame-rolling' );
-		var display;
 
-		// An unrecognised skin offers nowhere to put it. Animating a detached node
-		// would burn timers nobody can see.
+		// An unrecognised skin offers nowhere to put it, and there is no point holding
+		// space in a page that will never receive the sentence.
 		if ( !insertBelowSubtitle( box ) ) {
 			return;
 		}
 
 		while ( !outcome.done ) {
-			display = countDisplayState( Date.now() - startedAt, null );
-
-			if ( display === 'rolling' ) {
-				digits.textContent = rollingDigits();
-				await wait( COUNT_ROLL_FRAME_MS );
-				continue;
-			}
-
-			if ( display === 'still' ) {
-				// Nothing to redraw before the box settles, so one timer rather than
-				// thirty. 'still' only occurs below the threshold, so this stays
+			if ( countDisplayState( Date.now() - startedAt, null ) === 'loading' ) {
+				// Nothing redraws while it waits, so this is one timer rather than
+				// thirty. 'loading' only occurs below the threshold, so the delay stays
 				// positive and the loop cannot spin.
-				await wait( COUNT_ROLL_SETTLE_MS - ( Date.now() - startedAt ) );
+				await wait( PENDING_SETTLE_MS - ( Date.now() - startedAt ) );
 				continue;
 			}
 
-			// Settled. Nothing left to animate, so stop burning timers and let the
-			// awaited request replace the wording if it ever arrives.
+			// Settled. Let the awaited request replace the wording if it ever arrives.
 			settlePendingSummary( box );
 			return;
 		}
@@ -737,8 +709,8 @@
 
 		// Read the session cache before drawing anything. A cached answer needs no
 		// network, so there is no wait for a placeholder to explain — and drawing one
-		// anyway would invent an eighty-millisecond wait on every revisit, which is the
-		// common path for anyone moving between an article and its history.
+		// anyway would flash "analysing" on every revisit, which is the common path for
+		// anyone moving between an article and its history.
 		outcome.data = readCache( getCacheKey(), CLIENT_CACHE_MAX_AGE_MS );
 
 		if ( !outcome.data ) {
