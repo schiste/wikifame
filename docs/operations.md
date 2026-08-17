@@ -71,9 +71,20 @@ The API web process never calls these upstream services. Only workers and schedu
 No database migration is required for the page-freshness release: it reuses the existing
 `computed_at` column and page/algorithm index. Its three environment controls are:
 
-- `PAGE_FRESHNESS_SECONDS` (default `7776000`, 90 days);
-- `PAGE_CACHE_SECONDS` (default `86400`, one day);
-- `PAGE_STALE_WHILE_REVALIDATE_SECONDS` (default `604800`, seven days).
+- `PAGE_FRESHNESS_SECONDS` (default `7776000`, 90 days) — how long a stored row stays usable;
+- `PAGE_CACHE_SECONDS` (default `300`, five minutes) — how long a browser may reuse an answer
+  without revalidating. Keep it short: it is the delay between deploying a policy change and
+  readers seeing it. Every response carries an `ETag`, so the revalidation this buys is normally
+  a `304` with no body;
+- `READY_CACHE_SECONDS` (default `300`) — the same, for the legacy v1 endpoint;
+- `PAGE_STALE_WHILE_REVALIDATE_SECONDS` (default `604800`, seven days) — beyond the window above
+  the cached answer is still shown immediately while the refresh happens behind it, so a short
+  window costs no waiting.
+
+After deploying a change to `ALGORITHM_VERSION`, readers get the new answer on their next page
+view once their five-minute window lapses. Before ETags existed this took up to a day on v2 and a
+year on v1; if you are debugging a stale answer in a browser, check `sessionStorage` for
+`wikifame:*` as well, which the gadget holds for five minutes.
 
 The universal-wiki release adds the `active_wikis` table, which `create_all()` creates on first
 start; no migration is required either. Its environment controls are:

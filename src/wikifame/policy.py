@@ -72,7 +72,9 @@ def should_highlight_contributor(
         return False
     if has_bot_name(user.username):
         return False
-    if global_groups is not None and any(
+    # Kept as a fourth "if ...: return False" rather than inlined into the return, so the
+    # exclusion criteria read as one list. Adding a fifth should mean copying a line.
+    if global_groups is not None and any(  # noqa: SIM103
         is_bot_group(group) for group in global_groups(user.username)
     ):
         return False

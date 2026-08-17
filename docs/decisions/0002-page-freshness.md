@@ -24,6 +24,7 @@ exact Wikipedia revision was analyzed and when.
 - Expose `requested_revision_id`, `source_revision_id`, `computed_at`, `fresh_until`, `is_fresh`,
   and `refreshing` so the compromise is observable.
 - Cache v2 responses in browsers for one day with a seven-day stale-while-revalidate allowance.
+  (Superseded by [ADR-0007](0007-cache-validation.md): five minutes, plus an `ETag`.)
 - Make all three durations configurable without changing the algorithm version.
 - Make prewarm and backfill skip pages with a fresh result.
 
@@ -34,6 +35,8 @@ result can remain visible during a WikiWho outage, which improves availability b
 three may temporarily be older than 90 days. The exact source revision and date make that age
 explicit.
 
-V1 remains revision-exact and immutable for backwards compatibility. A future manual refresh
+V1 remains revision-exact and immutable for backwards compatibility. (Superseded by
+[ADR-0007](0007-cache-validation.md): a revision is fixed, but the policy applied to it is not,
+and `immutable` made that assumption unfixable in a reader's browser for a year.) A future manual refresh
 control should enqueue a privileged refresh while retaining the current row; authorization and
 abuse protection are deliberately left for a separate decision.

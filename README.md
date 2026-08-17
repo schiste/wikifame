@@ -50,6 +50,13 @@ policy, update behavior, privacy, and the path toward millions of articles.
   revalidate behavior.
 - [ADR-0003](docs/decisions/0003-universal-wiki-support.md): universal wiki support, demand-driven
   prewarming, and per-wiki on-wiki configuration.
+- [ADR-0004](docs/decisions/0004-on-wiki-extensibility.md): what a wiki may change from on-wiki
+  pages, and what it may not.
+- [ADR-0005](docs/decisions/0005-attribution-ladder.md): the fallback ladder below the token
+  metric.
+- [ADR-0006](docs/decisions/0006-bot-exclusion.md): what counts as a bot, beyond the local flag.
+- [ADR-0007](docs/decisions/0007-cache-validation.md): why cached answers carry an `ETag` and
+  expire in minutes rather than days.
 - [Contributing](CONTRIBUTING.md): local workflow and change checklist.
 - [Agent guide](AGENTS.md): repository invariants and commands for coding agents.
 

@@ -35,5 +35,9 @@ def test_page_freshness_defaults_are_explicit(monkeypatch: MonkeyPatch) -> None:
     settings = Settings.from_env()
 
     assert settings.page_freshness_seconds == 90 * 24 * 60 * 60
-    assert settings.page_cache_seconds == 24 * 60 * 60
+    # Three different clocks, deliberately far apart. How long a stored answer stays
+    # usable is ninety days; how long a reader may reuse one without checking is five
+    # minutes, because that is the delay a policy change has to wait out.
+    assert settings.page_cache_seconds == 5 * 60
+    assert settings.ready_cache_seconds == 5 * 60
     assert settings.page_stale_while_revalidate_seconds == 7 * 24 * 60 * 60

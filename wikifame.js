@@ -37,7 +37,15 @@
 	var TOOLFORGE_API_BASE = 'https://wikifame.toolforge.org';
 	var CONFIG_PAGE_SUFFIX = '/wikifame-config.json';
 	var REQUEST_TIMEOUT_MS = 8000;
-	var CLIENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+	// Deliberately short, and deliberately the same number the API puts in its max-age.
+	// This cache exists to spare a second request when a reader moves between an article
+	// and its history, which happens in seconds; holding an answer for a day instead
+	// meant a policy change on the server was invisible here for a day, because a reader
+	// with the answer already in hand never asks again and so never finds out it changed.
+	// Past this window the browser's own cache still answers most requests with a 304.
+	var CLIENT_CACHE_MAX_AGE_MS = 5 * 60 * 1000;
+	// Configuration and wikitext are edited by the people reading this page and are not
+	// affected by anything the API decides, so they keep the longer window.
 	var CONFIG_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 	var CONTENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 	var PENDING_RETRY_DELAYS_MS = [ 3000, 10000 ];

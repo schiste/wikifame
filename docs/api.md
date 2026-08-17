@@ -54,16 +54,28 @@ calculation remain usable across ordinary edits for `PAGE_FRESHNESS_SECONDS`, 90
 - When the result is expired, the same payload is returned with `is_fresh: false` and normally
   `refreshing: true`; a P100 refresh has been queued for the requested revision.
 
-Ready responses use bounded browser caching:
+Ready responses are cacheable but always checkable:
 
 ```http
-Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+Cache-Control: public, max-age=300, stale-while-revalidate=604800
+ETag: "6f1c…"
 X-WikiFame-Algorithm: attribution-ladder-v3
 X-WikiFame-Source-Revision: 456
 ```
 
-The browser may therefore reuse a response for one day, but it is never immutable. Operators can
-tune these durations with `PAGE_CACHE_SECONDS` and `PAGE_STALE_WHILE_REVALIDATE_SECONDS`.
+A browser may reuse a response for five minutes without asking. After that it revalidates, and a
+request carrying a matching `If-None-Match` gets `304 Not Modified` with the headers and no body;
+`stale-while-revalidate` means the reader still sees the cached answer immediately while that
+happens. The window is short because the answer is not a property of the revision alone — a policy
+change alters it while the URL stays the same, and a long window is a long period of serving an
+answer the service has already retired. See [ADR-0007](decisions/0007-cache-validation.md).
+
+The `ETag` is a hash of the response body, so it changes whenever anything in the answer does,
+including `algorithm_version`. Do not parse it. Operators can tune the durations with
+`PAGE_CACHE_SECONDS` and `PAGE_STALE_WHILE_REVALIDATE_SECONDS`.
+
+A `304` is returned only after the usual freshness check has run, so a stale page is still queued
+for recomputation by a request that receives no body.
 
 ### No result yet — `202 Accepted`
 
@@ -120,12 +132,16 @@ revision IDs are stable.
 Ready responses use:
 
 ```http
-Cache-Control: public, max-age=31536000, immutable
+Cache-Control: public, max-age=300
+ETag: "9a04…"
 X-WikiFame-Algorithm: attribution-ladder-v3
 ```
 
-Immutability is safe for v1 because the revision and algorithm version are part of the cache
-identity. New gadget clients should use v2.
+v1 was previously `max-age=31536000, immutable`, on the reasoning that a revision's attribution
+never changes. The revision does not, but the policy applied to it does, and the algorithm version
+is part of the *stored row's* identity while being absent from the URL — so the reader's copy
+outlived the answer it held. v1 now revalidates on the same terms as v2 and honours
+`If-None-Match`. New gadget clients should use v2.
 
 ### Pending — `202 Accepted`
 

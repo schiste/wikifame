@@ -106,9 +106,17 @@ class Settings:
             worker_lease_seconds=int(os.getenv("WORKER_LEASE_SECONDS", "300")),
             worker_max_attempts=int(os.getenv("WORKER_MAX_ATTEMPTS", "8")),
             dead_retry_seconds=int(os.getenv("DEAD_RETRY_SECONDS", "86400")),
-            ready_cache_seconds=int(os.getenv("READY_CACHE_SECONDS", "31536000")),
+            # How long a browser may reuse an answer without asking again. Short, because
+            # the answer is not a property of the revision alone: a policy change reaches
+            # readers only once their copy expires, and a day of that is a day of naming
+            # accounts the policy has already stopped naming. Every response carries an
+            # ETag, so the request this buys back is almost always a 304 with no body.
+            ready_cache_seconds=int(os.getenv("READY_CACHE_SECONDS", "300")),
             page_freshness_seconds=int(os.getenv("PAGE_FRESHNESS_SECONDS", str(90 * 24 * 60 * 60))),
-            page_cache_seconds=int(os.getenv("PAGE_CACHE_SECONDS", "86400")),
+            page_cache_seconds=int(os.getenv("PAGE_CACHE_SECONDS", "300")),
+            # Beyond the window above the cached copy is still shown immediately while the
+            # refresh happens behind it, so shortening the window costs no waiting. It only
+            # means the reader after this one sees the newer answer.
             page_stale_while_revalidate_seconds=int(
                 os.getenv("PAGE_STALE_WHILE_REVALIDATE_SECONDS", "604800")
             ),

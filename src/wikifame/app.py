@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import hashlib
+import json
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from datetime import UTC, timedelta
 from typing import Any
 
-from fastapi import FastAPI, HTTPException, Query, Response
+from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -15,6 +17,33 @@ from wikifame.runtime import Runtime, build_runtime
 
 def _isoformat(value: Any) -> str:
     return value.replace(tzinfo=UTC).isoformat().replace("+00:00", "Z")
+
+
+def _etag(payload: dict[str, Any]) -> str:
+    """
+    A validator derived from the response itself.
+
+    Hashing the payload rather than assembling a tag out of chosen fields means the tag
+    cannot drift from what it claims to describe: anything that changes the body changes
+    the tag, including the algorithm version, which is what a policy change moves and
+    what nothing in the URL records.
+    """
+    canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+    return '"' + hashlib.sha256(canonical.encode("utf-8")).hexdigest()[:32] + '"'
+
+
+def _if_none_match(header: str | None, etag: str) -> bool:
+    if not header:
+        return False
+    for candidate in header.split(","):
+        candidate = candidate.strip()
+        if candidate == "*":
+            return True
+        if candidate.startswith("W/"):
+            candidate = candidate[2:].strip()
+        if candidate == etag:
+            return True
+    return False
 
 
 def create_app(runtime: Runtime | None = None) -> FastAPI:
@@ -58,6 +87,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
 
     @app.get("/v1/{wiki}/pages/{page_id}", response_model=None)
     def page_attribution(
+        request: Request,
         response: Response,
         wiki: str,
         page_id: int,
@@ -74,11 +104,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         )
         if result is not None:
             other_contributors = max(0, result.distinct_contributors - len(result.contributors))
-            response.headers["Cache-Control"] = (
-                f"public, max-age={settings.ready_cache_seconds}, immutable"
-            )
-            response.headers["X-WikiFame-Algorithm"] = settings.algorithm_version
-            return {
+            payload = {
                 "status": "ready",
                 "wiki": result.wiki,
                 "page_id": result.page_id,
@@ -94,6 +120,18 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 "computed_at": _isoformat(result.computed_at),
                 "methodology_url": settings.methodology_url,
             }
+            # Not "immutable", though the URL names an exact revision whose text will
+            # never change again. What changes is the policy applied to that text, and
+            # the URL says nothing about which policy produced the answer.
+            headers = {
+                "Cache-Control": f"public, max-age={settings.ready_cache_seconds}",
+                "ETag": _etag(payload),
+                "X-WikiFame-Algorithm": settings.algorithm_version,
+            }
+            if _if_none_match(request.headers.get("if-none-match"), headers["ETag"]):
+                return Response(status_code=304, headers=headers)
+            response.headers.update(headers)
+            return payload
 
         work = app_runtime.repository.get_work(
             wiki, page_id, revision_id, settings.algorithm_version
@@ -136,6 +174,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
 
     @app.get("/v2/{wiki}/pages/{page_id}", response_model=None)
     def page_attribution_by_freshness(
+        request: Request,
         response: Response,
         wiki: str,
         page_id: int,
@@ -176,14 +215,8 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 )
                 refreshing = work is not None and work.state in {"pending", "leased"}
 
-            response.headers["Cache-Control"] = (
-                f"public, max-age={settings.page_cache_seconds}, "
-                f"stale-while-revalidate={settings.page_stale_while_revalidate_seconds}"
-            )
-            response.headers["X-WikiFame-Algorithm"] = settings.algorithm_version
-            response.headers["X-WikiFame-Source-Revision"] = str(result.revision_id)
             other_contributors = max(0, result.distinct_contributors - len(result.contributors))
-            return {
+            payload = {
                 "status": "ready",
                 "wiki": result.wiki,
                 "page_id": result.page_id,
@@ -203,6 +236,21 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 "refreshing": refreshing,
                 "methodology_url": settings.methodology_url,
             }
+            headers = {
+                "Cache-Control": (
+                    f"public, max-age={settings.page_cache_seconds}, "
+                    f"stale-while-revalidate={settings.page_stale_while_revalidate_seconds}"
+                ),
+                "ETag": _etag(payload),
+                "X-WikiFame-Algorithm": settings.algorithm_version,
+                "X-WikiFame-Source-Revision": str(result.revision_id),
+            }
+            # The enqueue above has already happened, so a 304 still keeps a stale page
+            # moving towards being recomputed. Only the body is spared.
+            if _if_none_match(request.headers.get("if-none-match"), headers["ETag"]):
+                return Response(status_code=304, headers=headers)
+            response.headers.update(headers)
+            return payload
 
         work = app_runtime.repository.get_work(
             wiki, page_id, revision_id, settings.algorithm_version
