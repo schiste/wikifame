@@ -22,6 +22,36 @@
 	margin: 0.12rem 0;
 }
 
+/* Digits stand in for the count while a slow request runs. Tabular figures and a
+   reserved width keep the sentence from reflowing on every frame: without them the
+   varying digit widths shift the text beside them eighty times a second. */
+.wikifame-rolling {
+	display: inline-block;
+	min-width: 4ch;
+	color: var(--color-subtle, #72777d);
+	font-variant-numeric: tabular-nums;
+	animation: wikifame-pulse 1.1s ease-in-out infinite;
+}
+
+@keyframes wikifame-pulse {
+	0%,
+	100% {
+		opacity: 0.45;
+	}
+
+	50% {
+		opacity: 0.85;
+	}
+}
+
+/* The script already stops turning the digits; this covers the frames drawn before
+   the first tick, and any reader whose preference changes mid-request. */
+@media (prefers-reduced-motion: reduce) {
+	.wikifame-rolling {
+		animation: none;
+	}
+}
+
 /* Parser output is the wiki's own markup dropped into a small note box, so it has to
    be contained rather than trusted to fit: media must not overflow the box, and the
    outer margins must not stack with the box padding. */

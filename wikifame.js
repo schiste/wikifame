@@ -39,6 +39,16 @@
 	var CONTENT_CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 	var PENDING_RETRY_DELAYS_MS = [ 3000, 10000 ];
 
+	// A warm response lands well inside COUNT_ROLL_START_MS, so the usual reader never
+	// sees a placeholder at all: showing one immediately would invent a wait that is not
+	// there. Rolling stops at COUNT_ROLL_SETTLE_MS because the retry chain can run for
+	// thirteen seconds and nobody watches digits spin that long — the box settles on
+	// wording that is true whatever the answer, and the real sentence replaces it later.
+	var COUNT_ROLL_START_MS = 200;
+	var COUNT_ROLL_SETTLE_MS = 2500;
+	var COUNT_ROLL_FRAME_MS = 80;
+	var COUNT_ROLL_DIGITS = 4;
+
 	var DEFAULT_CONFIG = {
 		enabled: true,
 		showHistoryIntro: true,
@@ -59,6 +69,7 @@
 			'wikifame-people': '{{PLURAL:$1|$1 person|$1 people}}',
 			'wikifame-others': '{{PLURAL:$1|$1 other person|$1 other people}}',
 			'wikifame-at-least': 'at least $1',
+			'wikifame-many-people': 'many people',
 			'wikifame-user-title': 'View the user page of $1',
 			'wikifame-share': '$1 of the currently visible tokens',
 			'wikifame-history-title': 'View the full page history',
@@ -76,6 +87,7 @@
 			'wikifame-people': '{{PLURAL:$1|$1 personne|$1 personnes}}',
 			'wikifame-others': '{{PLURAL:$1|$1 autre personne|$1 autres personnes}}',
 			'wikifame-at-least': 'au moins $1',
+			'wikifame-many-people': 'de nombreuses personnes',
 			'wikifame-user-title': 'Voir la page utilisateur de $1',
 			'wikifame-share': '$1 des tokens actuellement visibles',
 			'wikifame-history-title': 'Voir l’historique complet de l’article',
@@ -507,43 +519,241 @@
 		mw.hook( 'wikifame.history' ).fire( box, wikiConfig );
 	}
 
+	/**
+	 * What the count should look like right now.
+	 *
+	 * 'hidden'  nothing on the page yet — the common case, because a warm response
+	 *           beats the threshold and a placeholder would only invent a wait.
+	 * 'rolling' digits turning while the request is genuinely slow.
+	 * 'vague'   wording that holds whatever the answer turns out to be.
+	 * 'final'   the real sentence.
+	 *
+	 * Separated from the DOM so the whole timing policy is eight readable lines.
+	 */
+	function countDisplayState( elapsedMs, data ) {
+		if ( data ) {
+			return 'final';
+		}
+		if ( elapsedMs < COUNT_ROLL_START_MS ) {
+			return 'hidden';
+		}
+		if ( elapsedMs < COUNT_ROLL_SETTLE_MS ) {
+			// Without animation there is nothing to gain by appearing early, and a
+			// reader who asked for less motion is the last one who should be shown
+			// wording that flashes past on its way to being replaced.
+			return prefersReducedMotion() ? 'hidden' : 'rolling';
+		}
+		return 'vague';
+	}
+
+	/**
+	 * How long 'hidden' lasts: until the next threshold that is still ahead.
+	 *
+	 * Subtracting from COUNT_ROLL_START_MS unconditionally would go negative once that
+	 * threshold passes, and a zero-delay timer in a loop is a busy wait.
+	 */
+	function hiddenWaitMs( elapsedMs ) {
+		return elapsedMs < COUNT_ROLL_START_MS ?
+			COUNT_ROLL_START_MS - elapsedMs :
+			COUNT_ROLL_SETTLE_MS - elapsedMs;
+	}
+
+	function prefersReducedMotion() {
+		return Boolean(
+			window.matchMedia &&
+			window.matchMedia( '(prefers-reduced-motion: reduce)' ).matches
+		);
+	}
+
+	function rollingDigits() {
+		var out = '';
+		var index;
+
+		for ( index = 0; index < COUNT_ROLL_DIGITS; index++ ) {
+			out += String( Math.floor( Math.random() * 10 ) );
+		}
+		return out;
+	}
+
+	/**
+	 * The tier-three sentence with the number still missing.
+	 *
+	 * Hidden from assistive technology while it turns: a screen reader must not announce
+	 * a half-formed sentence, let alone one digit per frame. Both attributes come off
+	 * when the box settles on wording a reader can act on.
+	 */
+	function buildPendingSummary() {
+		var box = document.createElement( 'div' );
+		var digits = document.createElement( 'span' );
+
+		box.id = ARTICLE_SUMMARY_ID;
+		box.className = 'wikifame wikifame--article';
+		box.setAttribute( 'role', 'note' );
+		box.setAttribute( 'aria-busy', 'true' );
+		box.setAttribute( 'aria-hidden', 'true' );
+
+		digits.className = 'wikifame-rolling';
+		digits.textContent = rollingDigits();
+
+		box.append( document.createTextNode( mw.message( 'wikifame-summary-prefix' ).text() ) );
+		box.append( digits );
+		box.append( document.createTextNode( '.' ) );
+		return box;
+	}
+
+	/**
+	 * Stop turning and say something that stays true if the answer never comes.
+	 *
+	 * This is a refinement, not a correction: vague then precise, never wrong then right.
+	 * That is what separates it from showing a number the API would later contradict.
+	 */
+	function settlePendingSummary( box ) {
+		box.textContent = mw.message( 'wikifame-summary-prefix' ).text() +
+			mw.message( 'wikifame-many-people' ).text() + '.';
+		box.removeAttribute( 'aria-busy' );
+		box.removeAttribute( 'aria-hidden' );
+	}
+
+	/**
+	 * Drive the placeholder until the request resolves, one way or another.
+	 *
+	 * Exits as soon as `outcome.done` is set, so a fast answer costs one timer at most
+	 * and usually none: at COUNT_ROLL_START_MS the request has normally already won.
+	 */
+	async function runCountPlaceholder( startedAt, outcome ) {
+		var box = null;
+		var digits = null;
+		var display;
+
+		while ( !outcome.done ) {
+			display = countDisplayState( Date.now() - startedAt, null );
+
+			if ( display === 'hidden' ) {
+				await wait( hiddenWaitMs( Date.now() - startedAt ) );
+				continue;
+			}
+
+			if ( !box ) {
+				box = buildPendingSummary();
+				digits = box.querySelector( '.wikifame-rolling' );
+				// An unrecognised skin offers nowhere to put it. Animating a detached
+				// node would burn timers nobody can see.
+				if ( !insertBelowSubtitle( box ) ) {
+					return;
+				}
+			}
+
+			if ( display === 'rolling' ) {
+				digits.textContent = rollingDigits();
+				await wait( COUNT_ROLL_FRAME_MS );
+				continue;
+			}
+
+			// Settled. Nothing left to animate, so stop burning timers and let the
+			// awaited request replace the wording if it ever arrives.
+			settlePendingSummary( box );
+			return;
+		}
+	}
+
+	function removeArticleSummary() {
+		var existing = document.getElementById( ARTICLE_SUMMARY_ID );
+
+		if ( existing ) {
+			existing.remove();
+		}
+	}
+
+	/**
+	 * Render the attribution sentence, filling it in as the answer arrives.
+	 *
+	 * The request starts before anything is drawn, so the placeholder only ever appears
+	 * when the wait is real. A page the API cannot serve — an unsupported wiki, a network
+	 * failure — must leave no trace, which is why an error is told apart from a result
+	 * that is merely still being computed.
+	 */
 	async function addArticleSummary() {
-		var cacheKey = getCacheKey();
-		var cached = readCache( cacheKey, CLIENT_CACHE_MAX_AGE_MS );
-		var data;
+		var startedAt = Date.now();
+		var outcome = { done: false, data: null, failed: false };
+		var existing;
+		var pending;
 		var summary;
 
 		if ( document.getElementById( ARTICLE_SUMMARY_ID ) ) {
 			return;
 		}
 
-		try {
-			data = cached || await loadContributionData();
-			if ( !data ) {
-				return;
-			}
-			if ( !cached ) {
-				writeCache( cacheKey, data );
-			}
-			summary = buildArticleSummary( data );
-			if ( summary ) {
-				insertBelowSubtitle( summary );
-				mw.hook( 'wikifame.summary' ).fire( summary, data );
-			}
-		} catch ( error ) {
+		pending = contributionData( PENDING_RETRY_DELAYS_MS ).then( function ( value ) {
+			outcome.data = value;
+		}, function ( error ) {
 			mw.log.warn( 'WikiFame: attribution unavailable', error );
+			outcome.failed = true;
+		} ).then( function () {
+			outcome.done = true;
+		} );
+
+		await Promise.all( [ pending, runCountPlaceholder( startedAt, outcome ) ] );
+
+		// An error is not a slow answer: an unsupported wiki must not be left claiming
+		// that many people wrote the article.
+		if ( outcome.failed ) {
+			removeArticleSummary();
+			return;
 		}
+
+		// Still pending after every retry. The settled wording is the final answer.
+		if ( !outcome.data ) {
+			return;
+		}
+
+		summary = buildArticleSummary( outcome.data );
+		if ( !summary ) {
+			removeArticleSummary();
+			return;
+		}
+
+		existing = document.getElementById( ARTICLE_SUMMARY_ID );
+		if ( existing ) {
+			existing.replaceWith( summary );
+		} else {
+			insertBelowSubtitle( summary );
+		}
+		mw.hook( 'wikifame.summary' ).fire( summary, outcome.data );
 	}
 
-	async function loadContributionData() {
+	/**
+	 * Attribution for this page, from the session cache when it is there.
+	 *
+	 * The cache key is the page, not the view, so a reader who looks at an article and
+	 * then opens its history pays for one request rather than two. How long to wait on a
+	 * result that is still being computed is the caller's decision.
+	 */
+	async function contributionData( retryDelaysMs ) {
+		var cacheKey = getCacheKey();
+		var cached = readCache( cacheKey, CLIENT_CACHE_MAX_AGE_MS );
+		var data;
+
+		if ( cached ) {
+			return cached;
+		}
+
+		data = await loadContributionData( retryDelaysMs );
+		if ( data ) {
+			writeCache( cacheKey, data );
+		}
+		return data;
+	}
+
+	async function loadContributionData( retryDelaysMs ) {
 		var url = TOOLFORGE_API_BASE + '/v2/' +
 			encodeURIComponent( config.wgDBname ) + '/pages/' +
 			encodeURIComponent( config.wgArticleId ) +
 			'?revision_id=' + encodeURIComponent( config.wgCurRevisionId );
+		var delays = retryDelaysMs || PENDING_RETRY_DELAYS_MS;
 		var attempt;
 		var data;
 
-		for ( attempt = 0; attempt <= PENDING_RETRY_DELAYS_MS.length; attempt++ ) {
+		for ( attempt = 0; attempt <= delays.length; attempt++ ) {
 			data = await fetchJson( url, {
 				credentials: 'omit',
 				referrerPolicy: 'no-referrer'
@@ -564,8 +774,8 @@
 				throw new Error( 'Unknown attribution state.' );
 			}
 
-			if ( attempt < PENDING_RETRY_DELAYS_MS.length ) {
-				await wait( PENDING_RETRY_DELAYS_MS[ attempt ] );
+			if ( attempt < delays.length ) {
+				await wait( delays[ attempt ] );
 			}
 		}
 

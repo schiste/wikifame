@@ -3,6 +3,7 @@ from pathlib import Path
 
 GADGET_PATH = Path(__file__).parents[1] / "wikifame.js"
 GADGET_SOURCE = GADGET_PATH.read_text()
+GADGET_STYLES = (Path(__file__).parents[1] / "wikifame.css").read_text()
 
 
 def test_production_gadget_contains_no_page_fixture() -> None:
@@ -129,6 +130,21 @@ def test_javascript_extension_uses_hooks_instead_of_code_in_configuration() -> N
     assert "new Function" not in GADGET_SOURCE
 
 
+def test_both_views_share_one_cached_attribution_request() -> None:
+    """Reading an article and then its history must not cost two API calls."""
+    summary = GADGET_SOURCE.split("async function addArticleSummary(", 1)[1].split(
+        "\n\tasync function", 1
+    )[0]
+    assert "contributionData( PENDING_RETRY_DELAYS_MS )" in summary
+    # Caching belongs to the shared helper now, not to one of the two callers.
+    assert "readCache" not in summary
+    assert "writeCache" not in summary
+
+    shared = GADGET_SOURCE.split("async function contributionData(", 1)[1].split("\n\t}", 1)[0]
+    assert "readCache( cacheKey, CLIENT_CACHE_MAX_AGE_MS )" in shared
+    assert "writeCache( cacheKey, data )" in shared
+
+
 def test_source_holds_no_control_characters() -> None:
     """A literal NUL made grep treat the file as binary and silently find nothing.
 
@@ -137,6 +153,88 @@ def test_source_holds_no_control_characters() -> None:
     """
     assert "\x00" not in GADGET_PATH.read_bytes().decode()
     assert "'\\u0000' + index" in GADGET_SOURCE
+
+
+def test_slow_requests_alone_get_a_placeholder() -> None:
+    """A warm response beats the threshold, so the usual reader waits on nothing.
+
+    Showing a spinner for a 150 ms answer manufactures a wait that does not exist,
+    which is why the state machine starts at 'hidden' rather than at 'rolling'.
+    """
+    body = GADGET_SOURCE.split("function countDisplayState(", 1)[1].split("\n\t}", 1)[0]
+    assert "COUNT_ROLL_START_MS" in body
+    assert "'hidden'" in body
+    assert "'rolling'" in body
+    assert "'vague'" in body
+    assert "'final'" in body
+    # A result that is already in hand outranks every timer.
+    assert body.index("'final'") < body.index("'hidden'")
+
+    summary = GADGET_SOURCE.split("async function addArticleSummary(", 1)[1].split(
+        "\n\tasync function", 1
+    )[0]
+    # The request is in flight before anything is drawn, never after.
+    assert summary.index("contributionData( PENDING_RETRY_DELAYS_MS )") < summary.index(
+        "runCountPlaceholder("
+    )
+
+    # 'hidden' outlasts the start threshold under reduced motion, so the wait has to
+    # target whichever threshold is still ahead. Subtracting from the first one goes
+    # negative and turns the driver's loop into a busy wait.
+    driver = GADGET_SOURCE.split("async function runCountPlaceholder(", 1)[1].split(
+        "\n\t}", 1
+    )[0]
+    assert "hiddenWaitMs(" in driver
+    assert "COUNT_ROLL_START_MS - ( Date.now() - startedAt )" not in driver
+
+
+def test_turning_digits_are_never_announced_or_left_spinning() -> None:
+    """One digit per frame would make a screen reader unusable.
+
+    The box is hidden while it turns and exposed only once it says something a reader
+    can act on, and it stops turning long before the thirteen-second retry chain ends.
+    """
+    pending = GADGET_SOURCE.split("function buildPendingSummary(", 1)[1].split("\n\t}", 1)[0]
+    assert "'aria-busy', 'true'" in pending
+    assert "'aria-hidden', 'true'" in pending
+
+    settle = GADGET_SOURCE.split("function settlePendingSummary(", 1)[1].split("\n\t}", 1)[0]
+    assert "removeAttribute( 'aria-busy' )" in settle
+    assert "removeAttribute( 'aria-hidden' )" in settle
+    # Vague, but a complete and true sentence rather than a truncated one.
+    assert "'wikifame-many-people'" in settle
+    assert "'wikifame-summary-prefix'" in settle
+
+    assert "prefersReducedMotion()" in GADGET_SOURCE
+    assert "'(prefers-reduced-motion: reduce)'" in GADGET_SOURCE
+    assert "animation: none" in GADGET_STYLES
+    assert "prefers-reduced-motion: reduce" in GADGET_STYLES
+
+
+def test_placeholder_reserves_its_width_so_the_sentence_cannot_jitter() -> None:
+    """Digit widths differ, and the count sits mid-sentence with text beside it."""
+    assert "font-variant-numeric: tabular-nums" in GADGET_STYLES
+    assert "min-width: 4ch" in GADGET_STYLES
+
+
+def test_a_failed_request_is_told_apart_from_one_still_computing() -> None:
+    """An unsupported wiki must leave no trace, not claim that many people wrote it.
+
+    Both paths yield no data, so collapsing them would leave the vague wording on a
+    404 — an assertion about an article the API never agreed to serve.
+    """
+    summary = GADGET_SOURCE.split("async function addArticleSummary(", 1)[1].split(
+        "\n\tasync function", 1
+    )[0]
+    assert "outcome.failed" in summary
+    assert "removeArticleSummary()" in summary
+    # A pending result keeps whatever the placeholder settled on.
+    assert summary.index("if ( outcome.failed ) {") < summary.index("if ( !outcome.data ) {")
+    # The real sentence replaces the placeholder in place rather than joining it.
+    assert "existing.replaceWith( summary )" in summary
+    # The hook still carries real data, so it must not fire for a placeholder.
+    fired = summary.split("mw.hook( 'wikifame.summary' ).fire(", 1)[1]
+    assert "outcome.data" in fired.split("\n", 1)[0]
 
 
 def test_gadget_localises_plurals_and_lists_rather_than_hardcoding_french() -> None:
