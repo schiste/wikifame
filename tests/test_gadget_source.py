@@ -1,7 +1,8 @@
 import re
 from pathlib import Path
 
-GADGET_SOURCE = (Path(__file__).parents[1] / "wikifame.js").read_text()
+GADGET_PATH = Path(__file__).parents[1] / "wikifame.js"
+GADGET_SOURCE = GADGET_PATH.read_text()
 
 
 def test_production_gadget_contains_no_page_fixture() -> None:
@@ -126,6 +127,16 @@ def test_javascript_extension_uses_hooks_instead_of_code_in_configuration() -> N
     assert "mw.hook( 'wikifame.summary' ).fire(" in GADGET_SOURCE
     assert "eval(" not in GADGET_SOURCE
     assert "new Function" not in GADGET_SOURCE
+
+
+def test_source_holds_no_control_characters() -> None:
+    """A literal NUL made grep treat the file as binary and silently find nothing.
+
+    The list-formatter sentinel is still a NUL at runtime; it is spelled as an escape
+    so the source stays plain text and ordinary tooling keeps working.
+    """
+    assert "\x00" not in GADGET_PATH.read_bytes().decode()
+    assert "'\\u0000' + index" in GADGET_SOURCE
 
 
 def test_gadget_localises_plurals_and_lists_rather_than_hardcoding_french() -> None:

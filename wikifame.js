@@ -681,7 +681,7 @@
 		}
 
 		placeholders = nodes.map( function ( _node, index ) {
-			return ' ' + index;
+			return '\u0000' + index;
 		} );
 		parts = listFormatter.formatToParts( placeholders );
 
