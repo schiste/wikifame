@@ -91,7 +91,13 @@ Its two environment controls are:
 
 - `OPTOUT_PAGE` (default `Project:WikiFame/opt-out`) — the on-wiki list each community maintains.
   MediaWiki resolves the canonical `Project:` prefix per wiki, so one value reaches
-  `Wikipédia:WikiFame/opt-out` on frwiki and `Wikipedia:WikiFame/opt-out` on enwiki;
+  `Wikipédia:WikiFame/opt-out` on frwiki and `Wikipedia:WikiFame/opt-out` on enwiki. Always set it
+  in canonical form. A localized prefix only resolves on the wiki it came from: `Utilisateur:…` is
+  userspace on frwiki but a *mainspace article title* on enwiki, and the sync reads every active
+  wiki, so a stray article by that name would become that wiki's list. While WikiFame is a personal
+  script the list may live under the maintainer's `User:` tree instead; give it no `.json`, `.js`
+  or `.css` extension, or MediaWiki restricts it to interface administrators and the people it is
+  meant to serve can no longer edit it;
 - `OPTOUT_CATEGORY_LIMIT` (default `5000`) — how many articles one category entry may cover.
   Categories are not walked recursively. A category past the cap is logged as truncated by
   `optout-sync`, and that log line is the only signal, so read it.

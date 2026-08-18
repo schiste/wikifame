@@ -1,10 +1,20 @@
 <!--
 Page de retrait WikiFame — modèle de départ, version française.
 
-Destination : Wikipédia:WikiFame/opt-out
-Le service est configuré sur « Project:WikiFame/opt-out » ; MediaWiki résout ce préfixe
-canonique vers l'espace de noms projet local, donc un seul titre configuré convient à
-tous les wikis.
+Destination : la page nommée par OPTOUT_PAGE, et elle seule. Le service ne lit rien d'autre.
+Tant que WikiFame est un script personnel, c'est une sous-page de la personne qui le maintient
+— Utilisateur:Schiste/wikifame-optout sur frwiki. Quand une communauté adopte le gadget, elle
+passe à Wikipédia:WikiFame/opt-out ; il faut alors ajuster deux liens dans le corps de la page,
+celui vers la présentation et celui vers la page de discussion.
+
+Le titre est toujours configuré sous sa forme canonique — « User: », « Project: » — que
+MediaWiki résout vers l'espace de noms local. La forme localisée ne se résout que sur le wiki
+dont elle vient : « Utilisateur:… » désigne l'espace utilisateur sur frwiki, mais un titre
+d'article sur enwiki.
+
+Ne jamais donner à cette page une extension .json, .js ou .css : MediaWiki la verrouillerait
+aux seuls admins d'interface, et une personne demandant à ne plus être nommée devrait passer
+par un intermédiaire.
 
 Source : https://github.com/schiste/wikifame (docs/onwiki/optout.fr.wiki)
 Le format décrit ici est celui que lit wikifame/optout.py ; tests/test_optout.py vérifie
@@ -13,7 +23,7 @@ modifier le code ne changera rien au comportement réel.
 -->
 {{Sous-titre|Articles comptés mais sans noms}}
 
-Sur les articles listés ci-dessous, [[Wikipédia:WikiFame|WikiFame]] affiche le nombre total de
+Sur les articles listés ci-dessous, [[Utilisateur:Schiste/wikifame|WikiFame]] affiche le nombre total de
 personnes ayant contribué, mais '''ne nomme personne''' :
 
 : ''Article rédigé par [{{fullurl:Exemple|action=history}} 47 personnes].''
@@ -25,7 +35,10 @@ masqué de l'historique de l'article, qui reste consultable comme toujours.
 == Comment ajouter ou retirer une entrée ==
 
 Modifiez cette page comme n'importe quelle autre : elle n'exige aucun droit particulier, et elle a
-un historique, une liste de suivi et une page de discussion comme les autres.
+un historique, une liste de suivi et une page de discussion comme les autres. Qu'elle se trouve
+pour l'instant dans l'espace personnel de la personne qui maintient l'outil ne la lui réserve pas
+— c'est une page en wikitexte ordinaire, ouverte à tout le monde, et une demande de retrait n'a
+pas à passer par elle.
 
 Une entrée est '''une puce dont le lien est collé à la puce''' :
 
@@ -39,8 +52,8 @@ récupère le nouveau.
 Retirer une entrée est aussi rapide et aussi peu coûteux que d'en ajouter une : rien n'est
 recalculé dans un sens ni dans l'autre. Une erreur coûte vingt minutes, pas davantage.
 
-En cas de désaccord sur une entrée, la [[Discussion Wikipédia:WikiFame/opt-out|page de discussion]]
-est l'endroit prévu. Ajouter une entrée ne fait que retirer des noms ; c'est son retrait qui
+En cas de désaccord sur une entrée, la
+[[Discussion utilisateur:Schiste/wikifame-optout|page de discussion]] est l'endroit prévu. Ajouter une entrée ne fait que retirer des noms ; c'est son retrait qui
 mérite d'être discuté.
 
 == Règles de lecture ==
