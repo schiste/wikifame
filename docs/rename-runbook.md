@@ -91,21 +91,40 @@ renamed in one go rather than shimmed: there is one known consumer, and a compat
 layer emitting both sets is cruft that outlives its reason.
 
 Also in this phase, the **migration script**, because it is code and belongs under test.
+`src/wikipeople/migrate.py`, four tests.
 
 ### Why a script and not `mysqldump`
 
 There is no `mysqldump` on the Toolforge bastion — only the `mysql` client. Dumping through
 `SELECT` into TSV is not an option either: block and lock reasons are free text and now
-legitimately contain tabs and newlines.
+legitimately contain tabs and newlines. A reason wrapped across lines would come back
+truncated at the first tab, which is the erasure defect the column exists to prevent,
+reintroduced by the export.
 
 So migration reuses what the project already has. `models.py` defines the schema,
-`create_schema()` creates it in the new database, and a `migrate` entry point copies rows
-table by table, reading through the same SQLAlchemy models that wrote them. It runs **as the
-old tool**, which already holds its own credentials, and writes to the new database using
-the new tool's credentials passed in the environment — so no cross-tool `GRANT` is needed.
+`create_schema()` creates it in the new database, and `migrate` streams each table through
+the same SQLAlchemy metadata that wrote it. Six tables, 17 MB, ~34,000 rows.
 
-Six tables, 17 MB, ~34,000 rows. It must report per-table counts and refuse to run against a
-non-empty target.
+It names both databases by environment variable rather than by argument, because a DSN
+carries a password and arguments are visible to every user in `ps`:
+
+| Variable | Points at |
+| --- | --- |
+| `MIGRATE_SOURCE_URL` | the old tool's database |
+| `MIGRATE_TARGET_URL` | the new tool's database |
+
+Both are required even though the second could be inferred, so that the script can never
+write to the database it is reading.
+
+**Where it runs.** On the new tool, as a one-off job: the module only exists in the new
+image, and ToolsDB grants follow the user (`s…@%`), not the host, so the old tool's DSN
+works from there. `toolforge jobs run` has no `--env`, so the two variables are set as tool
+environment variables and removed straight after — see phase 3.
+
+It refuses a non-empty target. That refusal is the safety story: four of the six tables have
+composite primary keys, but `attribution_results` and `work_queue` autoincrement, so a
+second pass would append rather than conflict and the doubled counts would read as success.
+`--force-empty` is the recovery path from a half-finished run, and it has to be typed.
 
 ## Phase 3 — The switch
 
@@ -117,7 +136,18 @@ The only window where anything can look broken. Do it in one sitting.
    toolforge jobs delete attribution-worker    # and each scheduled job
    ```
 
-2. Run the migration, then compare the six table counts against the source.
+2. Run the migration from the new tool and compare the six table counts it prints:
+
+   ```bash
+   toolforge envvars create MIGRATE_SOURCE_URL    # prompts; not in ps, not in history
+   toolforge envvars create MIGRATE_TARGET_URL
+   toolforge jobs run migrate --image tool-wikipeople/tool-wikipeople:latest \
+     --command "python -m wikipeople.migrate" --wait
+   toolforge jobs logs migrate
+   toolforge envvars delete MIGRATE_SOURCE_URL && toolforge envvars delete MIGRATE_TARGET_URL
+   ```
+
+   It exits non-zero if any table's three counts disagree, but read them anyway.
 3. Deploy the renamed repository to the new tool and start its jobs:
 
    ```bash
