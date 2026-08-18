@@ -165,9 +165,11 @@ class ContributorStanding(Base):
     kindness, a lock can be a ban or a memorial — and only the administrator's wording
     tells them apart. `is_courtesy_block` and `is_sanction_lock` are what read them.
 
-    `lock_reason` is stored because the flag alone does not say what the lock means.
-    Stewards use one mechanism for opposite purposes, and a memorial lock must not read
-    as a ban; `is_sanction_lock` is what tells them apart, and it needs the text.
+    Both reasons are stored because neither flag says what it means. Stewards use one
+    lock mechanism for opposite purposes and a memorial must not read as a ban;
+    administrators likewise block abusers and block people at their own request.
+    `is_sanction_lock` and `is_courtesy_block` are what tell them apart, and both need
+    the text.
     """
 
     __tablename__ = "contributor_standing"
@@ -179,8 +181,12 @@ class ContributorStanding(Base):
     blocked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     block_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     block_partial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    block_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    # Text rather than a bounded string: administrators write long block reasons, and
+    # the whole point of storing them is that a courtesy must not be missed. A cut-off
+    # reason would hide a courtesy phrased late and withhold the name — the exact defect
+    # this column exists to fix, reintroduced by the storage.
+    block_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     globally_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    lock_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    lock_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
     lock_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)

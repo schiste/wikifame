@@ -342,8 +342,7 @@ class MediaWikiClient:
         events = data.get("query", {}).get("logevents", [])
         if not events:
             return None
-        comment = str(events[0].get("comment") or "").strip()
-        return comment[:255] or None
+        return str(events[0].get("comment") or "").strip() or None
 
     def global_user_info(self, wiki: str, username: str) -> GlobalUserInfo:
         """Return the CentralAuth groups and lock status of an account.

@@ -138,8 +138,9 @@ for a global lock alone. The opt-out list stays the fast path when something mus
 Both reasons are stored, in `block_reason` and `lock_reason`, because neither flag says what the
 sanction means. **On a database that predates them, `create_all()` will not add the columns** —
 it only creates missing tables. Run `ALTER TABLE contributor_standing ADD COLUMN block_reason
-VARCHAR(255) NULL` and the same for `lock_reason` before deploying, or every read of the table
-fails. If a courtesy wording is found being read as a sanction, the fix is to extend the patterns
+TEXT NULL` and the same for `lock_reason` before deploying, or every read of the table fails.
+`TEXT` rather than a bounded column on purpose: administrators write long block reasons, and a
+truncated one could hide a courtesy phrased late and withhold the name. If a courtesy wording is found being read as a sanction, the fix is to extend the patterns
 in `policy.py` and deploy; nothing is recomputed and no row needs editing.
 
 The universal-wiki release adds the `active_wikis` table, which `create_all()` creates on first
