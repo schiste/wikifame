@@ -1,9 +1,9 @@
 import re
 from pathlib import Path
 
-GADGET_PATH = Path(__file__).parents[1] / "wikifame.js"
+GADGET_PATH = Path(__file__).parents[1] / "wikipeople.js"
 GADGET_SOURCE = GADGET_PATH.read_text()
-GADGET_STYLES = (Path(__file__).parents[1] / "wikifame.css").read_text()
+GADGET_STYLES = (Path(__file__).parents[1] / "wikipeople.css").read_text()
 
 
 def test_production_gadget_contains_no_page_fixture() -> None:
@@ -45,7 +45,7 @@ def test_gadget_is_wiki_agnostic() -> None:
 def test_gadget_hardcodes_no_wiki_specific_page_titles() -> None:
     """Help and sandbox titles differ per wiki, so they come from local config."""
     assert "CONFIG_PAGE_SUFFIX" in GADGET_SOURCE
-    assert "'/wikifame-config.json'" in GADGET_SOURCE
+    assert "'/wikipeople-config.json'" in GADGET_SOURCE
     assert "Bac à sable" not in GADGET_SOURCE
     assert "Aide:Comment modifier une page" not in GADGET_SOURCE
     assert "'Utilisateur:'" not in GADGET_SOURCE
@@ -124,8 +124,8 @@ def test_translations_live_on_language_subpages() -> None:
 
 def test_javascript_extension_uses_hooks_instead_of_code_in_configuration() -> None:
     """Config pages stay declarative; arbitrary JS belongs in the reader's common.js."""
-    assert "mw.hook( 'wikifame.history' ).fire(" in GADGET_SOURCE
-    assert "mw.hook( 'wikifame.summary' ).fire(" in GADGET_SOURCE
+    assert "mw.hook( 'wikipeople.history' ).fire(" in GADGET_SOURCE
+    assert "mw.hook( 'wikipeople.summary' ).fire(" in GADGET_SOURCE
     assert "eval(" not in GADGET_SOURCE
     assert "new Function" not in GADGET_SOURCE
 
@@ -137,14 +137,14 @@ def test_contributor_count_is_injected_because_a_shared_page_cannot_hold_it() ->
     script replaces that text only once a real number arrives.
     """
     body = GADGET_SOURCE.split("async function fillContributorCount(", 1)[1].split("\n\t}", 1)[0]
-    assert "'.wikifame-count'" in body
-    assert "'.wikifame-number'" in body
+    assert "'.wikipeople-count'" in body
+    assert "'.wikipeople-number'" in body
     # Replacing text, never markup: a slot is a place to put a number, not an injection point.
     assert "textContent" in body
     assert "innerHTML" not in body
     # The count reuses the translated, plural-aware messages rather than gluing a string.
-    assert "'wikifame-people'" in body
-    assert "'wikifame-at-least'" in body
+    assert "'wikipeople-people'" in body
+    assert "'wikipeople-at-least'" in body
 
 
 def test_contributor_count_is_opt_in_and_never_rewrites_the_box_late() -> None:
@@ -249,19 +249,19 @@ def test_the_waiting_box_says_what_it_is_doing_and_nothing_about_the_article() -
     reserves the same space and cannot be mistaken for a result.
     """
     pending = GADGET_SOURCE.split("function buildPendingSummary(", 1)[1].split("\n\t}", 1)[0]
-    assert "'wikifame-pending'" in pending
+    assert "'wikipeople-pending'" in pending
     assert "'aria-busy', 'true'" in pending
     # The label is stable and meaningful, so it is announced rather than hidden.
     assert "aria-hidden" not in pending
     # Nothing in the waiting box may claim anything about who wrote the article.
-    assert "'wikifame-summary-prefix'" not in pending
-    assert "'wikifame-people'" not in pending
+    assert "'wikipeople-summary-prefix'" not in pending
+    assert "'wikipeople-people'" not in pending
 
     settle = GADGET_SOURCE.split("function settlePendingSummary(", 1)[1].split("\n\t}", 1)[0]
     assert "removeAttribute( 'aria-busy' )" in settle
     # Vague, but a complete and true sentence rather than a truncated one.
-    assert "'wikifame-many-people'" in settle
-    assert "'wikifame-summary-prefix'" in settle
+    assert "'wikipeople-many-people'" in settle
+    assert "'wikipeople-summary-prefix'" in settle
 
     # No random digits anywhere, and no motion left to opt out of.
     assert "Math.random()" not in GADGET_SOURCE
@@ -289,7 +289,7 @@ def test_a_failed_request_is_told_apart_from_one_still_computing() -> None:
     # The real sentence replaces the placeholder in place rather than joining it.
     assert "existing.replaceWith( summary )" in summary
     # The hook still carries real data, so it must not fire for a placeholder.
-    fired = summary.split("mw.hook( 'wikifame.summary' ).fire(", 1)[1]
+    fired = summary.split("mw.hook( 'wikipeople.summary' ).fire(", 1)[1]
     assert "outcome.data" in fired.split("\n", 1)[0]
 
 
@@ -309,14 +309,15 @@ def test_only_the_token_metric_earns_the_authorship_wording() -> None:
 
     summary = GADGET_SOURCE.split("function buildArticleSummary(", 1)[1].split("\n\t}", 1)[0]
     # Every place the wording differs reads the same flag, so the three cannot drift apart.
-    assert "namedByEditCount ? 'wikifame-tooltip-edits' : 'wikifame-tooltip'" in summary
+    assert "namedByEditCount ? 'wikipeople-tooltip-edits' : 'wikipeople-tooltip'" in summary
     assert (
-        "namedByEditCount ? 'wikifame-summary-prefix-edits' : 'wikifame-summary-prefix'" in summary
+        "namedByEditCount ? 'wikipeople-summary-prefix-edits' : 'wikipeople-summary-prefix'"
+        in summary
     )
     assert "createEditorLink( editor, namedByEditCount )" in summary
 
     link = GADGET_SOURCE.split("function createEditorLink(", 1)[1].split("\n\t}", 1)[0]
-    assert "byEditCount ? 'wikifame-share-edits' : 'wikifame-share'" in link
+    assert "byEditCount ? 'wikipeople-share-edits' : 'wikipeople-share'" in link
 
 
 def test_a_box_with_no_names_makes_no_claim_about_where_names_came_from() -> None:
@@ -329,7 +330,7 @@ def test_a_box_with_no_names_makes_no_claim_about_where_names_came_from() -> Non
     summary = GADGET_SOURCE.split("function buildArticleSummary(", 1)[1].split("\n\t}", 1)[0]
     assert "var namedByEditCount = topEditors.length > 0 && !data.wroteTheText;" in summary
     described = summary.split("if ( topEditors.length ) {", 1)[1]
-    assert "wikifame-tooltip" in described.split("\n\t\t}", 1)[0]
+    assert "wikipeople-tooltip" in described.split("\n\t\t}", 1)[0]
     # The computation date is true whatever was ranked, so it survives on its own.
     assert "box.title = tooltip.join( ' ' );" in summary
 

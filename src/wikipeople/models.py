@@ -145,7 +145,7 @@ class PageOptOut(Base):
 class ContributorStanding(Base):
     """What each named account's wiki has decided about it, materialised for the serve path.
 
-    Only accounts WikiFame actually names are tracked. That is a few thousand rows rather
+    Only accounts WikiPeople actually names are tracked. That is a few thousand rows rather
     than the wiki's whole block log, because the top three contributors of popular
     articles are the same prolific editors over and over.
 

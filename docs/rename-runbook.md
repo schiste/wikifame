@@ -122,7 +122,7 @@ The only window where anything can look broken. Do it in one sitting.
 
    ```bash
    scp jobs.yaml login.toolforge.org:/mnt/nfs/labstore-secondary-tools-project/wikipeople/jobs.yaml
-   toolforge build start https://github.com/schiste/wikipeople
+   toolforge build start https://github.com/schiste/wikifame
    toolforge webservice buildservice restart
    toolforge jobs load jobs.yaml
    ```

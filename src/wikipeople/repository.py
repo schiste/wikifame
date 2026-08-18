@@ -9,8 +9,8 @@ from sqlalchemy import and_, case, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 
-from wikifame.db import Database
-from wikifame.models import (
+from wikipeople.db import Database
+from wikipeople.models import (
     ActiveWiki,
     AppState,
     AttributionResult,
@@ -19,7 +19,7 @@ from wikifame.models import (
     WorkItem,
     utcnow,
 )
-from wikifame.policy import AccountStanding
+from wikipeople.policy import AccountStanding
 
 
 @dataclass(frozen=True)
@@ -454,7 +454,7 @@ class Repository:
         """User IDs whose global lock status is stale or was never read, oldest first.
 
         Never-checked accounts sort first. That matters more than it looks: an account
-        WikiFame has only just started naming is the one whose status nobody here has
+        WikiPeople has only just started naming is the one whose status nobody here has
         ever confirmed, so it goes ahead of one that was confirmed yesterday.
         """
         with self.database.session() as session:

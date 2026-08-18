@@ -1,7 +1,7 @@
-web: uvicorn wikifame.app:app --host 0.0.0.0 --port ${PORT:-8000}
-worker: python -m wikifame.worker
-prewarm: python -m wikifame.prewarm --days 7
-backfill: python -m wikifame.backfill --batches 1
-cleanup: python -m wikifame.cleanup
-optout: python -m wikifame.optout
-standing: python -m wikifame.standing
+web: uvicorn wikipeople.app:app --host 0.0.0.0 --port ${PORT:-8000}
+worker: python -m wikipeople.worker
+prewarm: python -m wikipeople.prewarm --days 7
+backfill: python -m wikipeople.backfill --batches 1
+cleanup: python -m wikipeople.cleanup
+optout: python -m wikipeople.optout
+standing: python -m wikipeople.standing

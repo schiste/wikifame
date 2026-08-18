@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from wikifame.config import Settings, get_settings
-from wikifame.db import Database
-from wikifame.repository import Repository
-from wikifame.sites import SiteResolver
+from wikipeople.config import Settings, get_settings
+from wikipeople.db import Database
+from wikipeople.repository import Repository
+from wikipeople.sites import SiteResolver
 
 
 @dataclass(frozen=True)

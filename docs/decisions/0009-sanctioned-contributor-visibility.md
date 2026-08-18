@@ -6,7 +6,7 @@
 
 ## Context
 
-Until now WikiFame named whoever wrote the text, and nothing about that account's standing
+Until now WikiPeople named whoever wrote the text, and nothing about that account's standing
 entered into it. [ADR-0001](0001-attribution-policy.md) and
 [ADR-0006](0006-bot-exclusion.md) exclude four things — missing users, temporary accounts,
 bots by group, bots by name — and a block is not among them. That was never argued; it

@@ -74,8 +74,8 @@ Ready responses are cacheable but always checkable:
 ```http
 Cache-Control: public, max-age=300, stale-while-revalidate=604800
 ETag: "6f1c…"
-X-WikiFame-Algorithm: attribution-ladder-v3
-X-WikiFame-Source-Revision: 456
+X-WikiPeople-Algorithm: attribution-ladder-v3
+X-WikiPeople-Source-Revision: 456
 ```
 
 A browser may reuse a response for five minutes without asking. After that it revalidates, and a
@@ -153,7 +153,7 @@ Ready responses use:
 ```http
 Cache-Control: public, max-age=300
 ETag: "9a04…"
-X-WikiFame-Algorithm: attribution-ladder-v3
+X-WikiPeople-Algorithm: attribution-ladder-v3
 ```
 
 v1 was previously `max-age=31536000, immutable`, on the reasoning that a revision's attribution

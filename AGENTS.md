@@ -4,7 +4,7 @@ These instructions apply to the whole repository.
 
 ## Mission and current scope
 
-WikiFame powers a Wikipedia personal-script prototype that displays three registered, non-bot,
+WikiPeople powers a Wikipedia personal-script prototype that displays three registered, non-bot,
 non-temporary accounts associated with surviving WikiWho tokens and links the remaining historical
 contributor count to page history. Toolforge is the prototype backend. One unmodified gadget file
 serves every Wikipedia WikiWho covers.
@@ -23,7 +23,7 @@ serves every Wikipedia WikiWho covers.
 - Keep the gadget backed exclusively by the Toolforge API; do not add production-page fixtures.
 - Keep the gadget wiki-agnostic: no wiki name, host, namespace prefix, page title, plural form, or
   list separator may be hard-coded. Per-wiki settings belong in the on-wiki configuration page
-  (`User:<name>/wikifame-config.json` while this is a personal script).
+  (`User:<name>/wikipeople-config.json` while this is a personal script).
 - Nothing from a configuration page is ever executed or inserted as markup. Rich content comes from
   a wikitext page through MediaWiki's parser; JavaScript comes from `mw.hook`. No `eval`, no
   `innerHTML`.
@@ -36,13 +36,13 @@ serves every Wikipedia WikiWho covers.
 
 ## Repository map
 
-- `wikifame.js`, `.css`: MediaWiki gadget/personal script.
-- `src/wikifame/app.py`: cache-only HTTP API.
-- `src/wikifame/worker.py`: asynchronous calculation orchestration.
-- `src/wikifame/clients.py`: all external HTTP calls.
-- `src/wikifame/sites.py`: database name → WikiWho language → Wikipedia host, and enablement.
-- `src/wikifame/policy.py`, `attribution.py`: product rules and pure aggregation.
-- `src/wikifame/repository.py`, `models.py`: durable cache, queue, leases, retention.
+- `wikipeople.js`, `.css`: MediaWiki gadget/personal script.
+- `src/wikipeople/app.py`: cache-only HTTP API.
+- `src/wikipeople/worker.py`: asynchronous calculation orchestration.
+- `src/wikipeople/clients.py`: all external HTTP calls.
+- `src/wikipeople/sites.py`: database name → WikiWho language → Wikipedia host, and enablement.
+- `src/wikipeople/policy.py`, `attribution.py`: product rules and pure aggregation.
+- `src/wikipeople/repository.py`, `models.py`: durable cache, queue, leases, retention.
 - `prewarm.py`, `backfill.py`, `cleanup.py`, `optout.py`: scheduled jobs.
 - `docs/api.md`: consumer contract.
 - `docs/operations.md`: deployment and incident runbook.
@@ -55,7 +55,7 @@ serves every Wikipedia WikiWho covers.
 .venv/bin/pytest
 .venv/bin/ruff check src tests
 .venv/bin/ruff format --check src tests
-node --check wikifame.js
+node --check wikipeople.js
 git diff --check
 ```
 

@@ -1,6 +1,6 @@
 from pytest import MonkeyPatch
 
-from wikifame.config import Settings
+from wikipeople.config import Settings
 
 
 def test_toolforge_credentials_build_default_toolsdb_url(monkeypatch: MonkeyPatch) -> None:
@@ -13,7 +13,7 @@ def test_toolforge_credentials_build_default_toolsdb_url(monkeypatch: MonkeyPatc
 
     assert settings.database_url == (
         "mysql+pymysql://s12345:secret%3A%2F+value@"
-        "tools.db.svc.wikimedia.cloud/s12345__wikifame?charset=utf8mb4"
+        "tools.db.svc.wikimedia.cloud/s12345__wikipeople?charset=utf8mb4"
     )
 
 
@@ -46,7 +46,7 @@ def test_page_freshness_defaults_are_explicit(monkeypatch: MonkeyPatch) -> None:
 def test_the_optout_page_title_is_one_title_for_every_wiki(monkeypatch: MonkeyPatch) -> None:
     """ "Project:" is a canonical prefix MediaWiki resolves per wiki.
 
-    It reaches "Wikipédia:WikiFame/opt-out" on frwiki and "Wikipedia:WikiFame/opt-out"
+    It reaches "Wikipédia:WikiPeople/opt-out" on frwiki and "Wikipedia:WikiPeople/opt-out"
     on enwiki without this service holding a table of namespace names it would have to
     keep in step with seventy communities.
     """
@@ -55,5 +55,5 @@ def test_the_optout_page_title_is_one_title_for_every_wiki(monkeypatch: MonkeyPa
 
     settings = Settings.from_env()
 
-    assert settings.optout_page == "Project:WikiFame/opt-out"
+    assert settings.optout_page == "Project:WikiPeople/opt-out"
     assert settings.optout_category_limit == 5000

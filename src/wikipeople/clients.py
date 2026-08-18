@@ -11,9 +11,9 @@ from urllib.parse import quote, unquote
 
 import httpx
 
-from wikifame.errors import PermanentDataError, ResponseTooLargeError, RetryableUpstreamError
-from wikifame.policy import AccountStanding, ResolvedUser
-from wikifame.sites import SiteResolver
+from wikipeople.errors import PermanentDataError, ResponseTooLargeError, RetryableUpstreamError
+from wikipeople.policy import AccountStanding, ResolvedUser
+from wikipeople.sites import SiteResolver
 
 GLOBAL_GROUP_CACHE_SIZE = 4096
 

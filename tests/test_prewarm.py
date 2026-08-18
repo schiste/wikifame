@@ -2,9 +2,9 @@ from dataclasses import replace
 from datetime import date
 from pathlib import Path
 
-from wikifame.config import Settings
-from wikifame.prewarm import collect_recent_top_titles, resolve_target_wikis
-from wikifame.runtime import Runtime, build_runtime
+from wikipeople.config import Settings
+from wikipeople.prewarm import collect_recent_top_titles, resolve_target_wikis
+from wikipeople.runtime import Runtime, build_runtime
 
 
 class FakeAnalytics:

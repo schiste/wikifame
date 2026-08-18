@@ -1,4 +1,4 @@
-.wikifame {
+.wikipeople {
 	box-sizing: border-box;
 	margin: 0.35rem 0 0.9rem;
 	color: var(--color-subtle, #54595d);
@@ -6,11 +6,11 @@
 	line-height: 1.5;
 }
 
-.wikifame--article a {
+.wikipeople--article a {
 	font-weight: 600;
 }
 
-.wikifame--history {
+.wikipeople--history {
 	padding: 0.65rem 0.9rem;
 	border: 1px solid var(--border-color-base, #a2a9b1);
 	background: var(--background-color-neutral-subtle, #f8f9fa);
@@ -18,7 +18,7 @@
 
 /* Direct children only: the tight rhythm suits the built-in sentences, but custom
    wikitext brings its own structure and needs room to breathe. */
-.wikifame--history > p {
+.wikipeople--history > p {
 	margin: 0.12rem 0;
 }
 
@@ -27,7 +27,7 @@
    milliseconds on most visits, and motion there would draw the eye to the one thing on
    the page that is not yet worth reading. Nothing here moves, so there is no
    prefers-reduced-motion case to answer. */
-.wikifame-pending {
+.wikipeople-pending {
 	color: var(--color-subtle, #72777d);
 	font-style: italic;
 }
@@ -35,33 +35,33 @@
 /* Parser output is the wiki's own markup dropped into a small note box, so it has to
    be contained rather than trusted to fit: media must not overflow the box, and the
    outer margins must not stack with the box padding. */
-.wikifame-custom {
+.wikipeople-custom {
 	overflow-wrap: break-word;
 }
 
-.wikifame-custom img,
-.wikifame-custom video {
+.wikipeople-custom img,
+.wikipeople-custom video {
 	max-width: 100%;
 	height: auto;
 }
 
-.wikifame-custom .thumb,
-.wikifame-custom figure,
-.wikifame-custom table {
+.wikipeople-custom .thumb,
+.wikipeople-custom figure,
+.wikipeople-custom table {
 	max-width: 100%;
 	margin: 0.35rem 0;
 }
 
-.wikifame-custom > :first-child {
+.wikipeople-custom > :first-child {
 	margin-top: 0;
 }
 
-.wikifame-custom > :last-child {
+.wikipeople-custom > :last-child {
 	margin-bottom: 0;
 }
 
 @media print {
-	.wikifame {
+	.wikipeople {
 		display: none;
 	}
 }

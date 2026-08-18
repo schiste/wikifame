@@ -1,6 +1,6 @@
 # Toolforge operations runbook
 
-This runbook is the handoff reference for deploying and maintaining WikiFame. Never commit
+This runbook is the handoff reference for deploying and maintaining WikiPeople. Never commit
 credentials, `.env`, database dumps, or Toolforge account files.
 
 ## Required ownership
@@ -8,14 +8,14 @@ credentials, `.env`, database dumps, or Toolforge account files.
 Before production use, ensure at least two maintainers have:
 
 - access to the GitHub repository;
-- membership in the Toolforge `wikifame` tool;
+- membership in the Toolforge `wikipeople` tool;
 - permission to inspect webservice and job logs;
 - access to the on-wiki gadget or personal-script pages;
 - a documented contact path to WikiWho operators.
 
-Update `WIKIFAME_USER_AGENT` whenever the operational contact changes.
+Update `WIKIPEOPLE_USER_AGENT` whenever the operational contact changes.
 
-The personal-script prototype lives on the user-page subpages `wikifame.js` and `wikifame.css` of
+The personal-script prototype lives on the user-page subpages `wikipeople.js` and `wikipeople.css` of
 each maintainer's account, on whichever wiki they use. Its `common.js` must not simultaneously
 import the former `ContributeursHumains` filenames.
 
@@ -33,13 +33,13 @@ The API web process never calls these upstream services. Only workers and schedu
 
 ## First deployment
 
-1. Create or join the Toolforge tool. If its name is not `wikifame`, update the image names in
-   `jobs.yaml` and `TOOLFORGE_API_BASE` in `wikifame.js`.
-2. Create the ToolsDB database named `${TOOL_TOOLSDB_USER}__wikifame` using the credential-user
+1. Create or join the Toolforge tool. If its name is not `wikipeople`, update the image names in
+   `jobs.yaml` and `TOOLFORGE_API_BASE` in `wikipeople.js`.
+2. Create the ToolsDB database named `${TOOL_TOOLSDB_USER}__wikipeople` using the credential-user
    prefix required by Toolforge. The application automatically consumes Toolforge's injected
    `TOOL_TOOLSDB_USER` and `TOOL_TOOLSDB_PASSWORD`; do not copy those secrets into the repository.
    Set `TOOLSDB_DATABASE` only if a different database suffix is intentionally used.
-3. Configure `WIKIFAME_USER_AGENT` with a monitored contact address or user page.
+3. Configure `WIKIPEOPLE_USER_AGENT` with a monitored contact address or user page.
 4. Build from the public repository:
 
    ```bash
@@ -61,7 +61,7 @@ The API web process never calls these upstream services. Only workers and schedu
 7. Check the service and jobs:
 
    ```bash
-   curl -fsS https://wikifame.toolforge.org/healthz
+   curl -fsS https://wikipeople.toolforge.org/healthz
    toolforge jobs list --output long
    ```
 
@@ -84,17 +84,17 @@ No database migration is required for the page-freshness release: it reuses the 
 After deploying a change to `ALGORITHM_VERSION`, readers get the new answer on their next page
 view once their five-minute window lapses. Before ETags existed this took up to a day on v2 and a
 year on v1; if you are debugging a stale answer in a browser, check `sessionStorage` for
-`wikifame:*` as well, which the gadget holds for five minutes.
+`wikipeople:*` as well, which the gadget holds for five minutes.
 
 The opt-out release adds the `page_optout` table, which `create_all()` creates on first start.
 Its two environment controls are:
 
-- `OPTOUT_PAGE` (default `Project:WikiFame/opt-out`) — the on-wiki list each community maintains.
+- `OPTOUT_PAGE` (default `Project:WikiPeople/opt-out`) — the on-wiki list each community maintains.
   MediaWiki resolves the canonical `Project:` prefix per wiki, so one value reaches
-  `Wikipédia:WikiFame/opt-out` on frwiki and `Wikipedia:WikiFame/opt-out` on enwiki. Always set it
+  `Wikipédia:WikiPeople/opt-out` on frwiki and `Wikipedia:WikiPeople/opt-out` on enwiki. Always set it
   in canonical form. A localized prefix only resolves on the wiki it came from: `Utilisateur:…` is
   userspace on frwiki but a *mainspace article title* on enwiki, and the sync reads every active
-  wiki, so a stray article by that name would become that wiki's list. While WikiFame is a personal
+  wiki, so a stray article by that name would become that wiki's list. While WikiPeople is a personal
   script the list may live under the maintainer's `User:` tree instead; give it no `.json`, `.js`
   or `.css` extension, or MediaWiki restricts it to interface administrators and the people it is
   meant to serve can no longer edit it;
@@ -169,7 +169,7 @@ Check current state with `GET /v1/stats`: `supported_wikis` is the configured en
 To pin a wiki before its first reader arrives, add it to `PREWARM_WIKIS`. To prime it by hand:
 
 ```bash
-python -m wikifame.prewarm --wiki dewiki --days 1
+python -m wikipeople.prewarm --wiki dewiki --days 1
 ```
 
 Enable `BACKFILL_WIKIS` only after measuring row size. English Wikipedia alone has millions of
@@ -177,8 +177,8 @@ articles against a nominal 25 GB ToolsDB boundary.
 
 ### The on-wiki configuration page
 
-While WikiFame is a personal script, each user's settings live at
-`User:<name>/wikifame-config.json` on the wiki, next to their copy of the script. Per-wiki defaults
+While WikiPeople is a personal script, each user's settings live at
+`User:<name>/wikipeople-config.json` on the wiki, next to their copy of the script. Per-wiki defaults
 are published in [`config/`](../config) for people to copy; the full field reference and
 troubleshooting steps are in [on-wiki setup](onwiki-setup.md).
 
@@ -190,14 +190,14 @@ Edits propagate within minutes (`action=raw` is CDN-cached) and reach a given re
 browser session, or after 24 hours at the latest.
 
 When a community adopts the script as a site-wide gadget, its configuration moves to
-`MediaWiki:Wikifame-config.json` on that wiki, maintained by its interface administrators.
+`MediaWiki:Wikipeople-config.json` on that wiki, maintained by its interface administrators.
 
 ## Normal deployment
 
 After merging a code change:
 
 ```bash
-scp jobs.yaml login.toolforge.org:/mnt/nfs/labstore-secondary-tools-project/wikifame/jobs.yaml
+scp jobs.yaml login.toolforge.org:/mnt/nfs/labstore-secondary-tools-project/wikipeople/jobs.yaml
 toolforge build start https://github.com/schiste/wikifame
 toolforge webservice buildservice restart
 toolforge jobs load jobs.yaml
@@ -222,7 +222,7 @@ Confirm the rollout before believing it:
 ```bash
 toolforge jobs show attribution-worker    # "Started at" must be after the build
 toolforge jobs list                       # every job in jobs.yaml must appear
-curl -fsS https://wikifame.toolforge.org/v1/stats
+curl -fsS https://wikipeople.toolforge.org/v1/stats
 ```
 
 Then inspect webservice logs and check that both worker replicas are running.
@@ -255,7 +255,7 @@ Check:
   per-wiki `opted_out` counts — a count that drops to zero on a wiki that had entries means the
   list page was blanked, moved, or is being read from the wrong title;
 - `/v2/{wiki}/pages/{page_id}?revision_id={revision_id}` for `is_fresh`, `refreshing`, and the
-  `X-WikiFame-Source-Revision` header on a known article;
+  `X-WikiPeople-Source-Revision` header on a known article;
 - `toolforge webservice buildservice logs -f` for API errors;
 - `toolforge jobs logs attribution-worker -f` for upstream or worker failures;
 - ToolsDB size after 100,000, 500,000, and 1,000,000 ready rows;
@@ -280,14 +280,14 @@ backoff, and exhausted transient jobs can revive after `DEAD_RETRY_SECONDS`.
 ### A community wants the gadget off, or its wording changed
 
 This is a local decision and needs no deployment. Each user sets `"enabled": false` in their own
-`User:<name>/wikifame-config.json`, or simply removes the import from their `common.js`. Removing
+`User:<name>/wikipeople-config.json`, or simply removes the import from their `common.js`. Removing
 the wiki from `SUPPORTED_WIKIS` is the operator-side equivalent and is only needed when the wiki
 must stop being served entirely.
 
 ### An article should stop naming its contributors
 
 This is a community decision and needs no deployment. Add the article — or a category it belongs
-to — as a bulleted link on `Wikipédia:WikiFame/opt-out` (or the same page in the local project
+to — as a bulleted link on `Wikipédia:WikiPeople/opt-out` (or the same page in the local project
 namespace). Where that page does not exist yet, `docs/onwiki/optout.fr.wiki` is a starter copy to
 paste: it documents the entry format for editors and ships with no entries. `optout-sync` picks it up within fifteen minutes, and readers see the change once
 their five-minute cache lapses. Removing the entry reverses it just as quickly; nothing is
@@ -296,7 +296,7 @@ recomputed either way.
 To check what a list will cover before it takes effect:
 
 ```bash
-python -m wikifame.optout --wiki frwiki --dry-run
+python -m wikipeople.optout --wiki frwiki --dry-run
 ```
 
 If a page seems not to be covered, the sync log names what it dropped and why: a redlinked title,
@@ -316,7 +316,7 @@ test it against a copy, and deploy it before code that requires the new schema.
 
 ### Backfill must restart
 
-Run `python -m wikifame.backfill --restart` once, then let the scheduled job resume. Restarting
+Run `python -m wikipeople.backfill --restart` once, then let the scheduled job resume. Restarting
 millions of pages is expensive; confirm the need first.
 
 ## Backups and retention
@@ -332,7 +332,7 @@ to test restoration before a migration.
 ## Maintainer transfer checklist
 
 - Add the new maintainer to GitHub and Toolforge before removing the previous one.
-- Transfer the monitored email/user-page contact and update `WIKIFAME_USER_AGENT`.
+- Transfer the monitored email/user-page contact and update `WIKIPEOPLE_USER_AGENT`.
 - Review Toolforge variables, job status, database name/size, and last backup.
 - Share the WikiWho contact history and any agreed request-rate limits.
 - Identify the on-wiki personal script/gadget pages and interface-administrator contacts.

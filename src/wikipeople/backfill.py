@@ -3,8 +3,8 @@ from __future__ import annotations
 import argparse
 import logging
 
-from wikifame.clients import MediaWikiClient
-from wikifame.runtime import Runtime, build_runtime
+from wikipeople.clients import MediaWikiClient
+from wikipeople.runtime import Runtime, build_runtime
 
 LOGGER = logging.getLogger(__name__)
 COMPLETE = "__COMPLETE__"

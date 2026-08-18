@@ -3,13 +3,13 @@ from dataclasses import replace
 from datetime import timedelta
 from pathlib import Path
 
-from wikifame.clients import EditorCount, EditorHistory, PageMetadata
-from wikifame.config import Settings
-from wikifame.errors import PermanentDataError
-from wikifame.models import utcnow
-from wikifame.policy import ResolvedUser
-from wikifame.runtime import build_runtime
-from wikifame.worker import Worker
+from wikipeople.clients import EditorCount, EditorHistory, PageMetadata
+from wikipeople.config import Settings
+from wikipeople.errors import PermanentDataError
+from wikipeople.models import utcnow
+from wikipeople.policy import ResolvedUser
+from wikipeople.runtime import build_runtime
+from wikipeople.worker import Worker
 
 # 4 to 7 exist so the fallback can be asked to drop them: the same accounts the token
 # path would never name must be unnameable through the edit-count path too. 6 and 7 are

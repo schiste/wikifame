@@ -6,14 +6,14 @@
 
 ## Context
 
-WikiFame's whole purpose is to name people. That is desirable almost everywhere and
+WikiPeople's whole purpose is to name people. That is desirable almost everywhere and
 uncomfortable in a few places: a biography of a living person whose article is contested,
 a page at the centre of a dispute, an article whose most prolific contributor would rather
 not be advertised as such next to it. The attribution is not secret — it is the page
 history, one click away — but a sentence under the title is not the page history. It is a
 credit, and a credit can be unwelcome.
 
-There is already a way to switch WikiFame off: a reader removes it from their own
+There is already a way to switch WikiPeople off: a reader removes it from their own
 `common.js`, or a wiki sets `"enabled": false`. Both are all-or-nothing and both belong to
 the wrong person. The reader is not who the credit is about.
 
@@ -24,9 +24,9 @@ operator, applying to every reader rather than to the one who set it.
 
 **A list of articles is maintained on-wiki. The API enforces it.**
 
-- The list lives at `Project:WikiFame/opt-out`. MediaWiki resolves the canonical
+- The list lives at `Project:WikiPeople/opt-out`. MediaWiki resolves the canonical
   `Project:` prefix to each wiki's own project namespace, so a single configured title is
-  `Wikipédia:WikiFame/opt-out` on frwiki and `Wikipedia:WikiFame/opt-out` on enwiki, with
+  `Wikipédia:WikiPeople/opt-out` on frwiki and `Wikipedia:WikiPeople/opt-out` on enwiki, with
   no per-wiki table to keep in step.
 - It is ordinary wikitext. An entry is a bulleted line whose first link names an article or
   a category; everything else on the page — headings, prose, a note explaining an entry,
@@ -51,7 +51,7 @@ operator, applying to every reader rather than to the one who set it.
   names one direct request away.
 - **Nothing is deleted or skipped.** The stored row keeps its contributors, and workers go
   on computing them. The names are public page-history data; what the list governs is
-  whether WikiFame presents them.
+  whether WikiPeople presents them.
 
 **The list is materialised by a scheduled job, not read on request.**
 
@@ -92,7 +92,7 @@ reverted. That is the cost of putting the control where the community can reach 
 Because the opt-out is presentation and not computation, `ALGORITHM_VERSION` does not move
 and cached rows stay valid. The corollary is that the stored table still holds the names of
 an opted-out page. Anyone who considers that unacceptable is asking a different question —
-whether WikiFame should hold the data at all — which is a decision about retention, not
+whether WikiPeople should hold the data at all — which is a decision about retention, not
 about this list.
 
 `page_optout` is a new table. `create_all()` creates it on first start; no migration is

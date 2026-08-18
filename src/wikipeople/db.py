@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from sqlalchemy import Engine, create_engine, text
 from sqlalchemy.orm import Session, sessionmaker
 
-from wikifame.models import Base
+from wikipeople.models import Base
 
 
 class Database:

@@ -4,8 +4,8 @@ from datetime import date, datetime
 import httpx
 import pytest
 
-from wikifame.clients import AnalyticsClient, MediaWikiClient, WikiWhoClient
-from wikifame.errors import PermanentDataError, ResponseTooLargeError, RetryableUpstreamError
+from wikipeople.clients import AnalyticsClient, MediaWikiClient, WikiWhoClient
+from wikipeople.errors import PermanentDataError, ResponseTooLargeError, RetryableUpstreamError
 
 
 def make_client(payload: dict, max_bytes: int = 10_000) -> WikiWhoClient:

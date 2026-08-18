@@ -3,13 +3,13 @@ from __future__ import annotations
 import argparse
 import logging
 
-from wikifame.runtime import build_runtime
+from wikipeople.runtime import build_runtime
 
 LOGGER = logging.getLogger(__name__)
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Prune obsolete WikiFame cache rows")
+    parser = argparse.ArgumentParser(description="Prune obsolete WikiPeople cache rows")
     parser.add_argument("--queue-days", type=int, default=30)
     parser.add_argument("--old-revision-days", type=int, default=30)
     args = parser.parse_args()

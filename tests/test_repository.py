@@ -1,9 +1,9 @@
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from wikifame.db import Database
-from wikifame.models import utcnow
-from wikifame.repository import Repository
+from wikipeople.db import Database
+from wikipeople.models import utcnow
+from wikipeople.repository import Repository
 
 
 def make_repository(tmp_path: Path) -> Repository:

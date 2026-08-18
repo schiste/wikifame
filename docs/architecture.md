@@ -4,7 +4,7 @@
 
 Two questions are answered separately.
 
-**Can this wiki be analysed?** `wikifame/sites.py` strips the `wiki` suffix from the database
+**Can this wiki be analysed?** `wikipeople/sites.py` strips the `wiki` suffix from the database
 name and checks the remainder against the set of WikiWho language codes. Every such code is
 dash-free, so `frwiki` resolves to `fr` and therefore to `fr.wikipedia.org` exactly. The same
 rule excludes everything else without a denylist: `frwikisource` fails the suffix test, and
@@ -21,9 +21,9 @@ defaults to empty. A wiki nobody reads therefore costs nothing. See
 
 The gadget is one wiki-agnostic file. It reports `wgDBname` and lets the API decide; a wiki that
 is off answers `404` and the gadget renders nothing. Wording, help links, and a local opt-out live
-in an on-wiki JSON page, so they change without a deployment. While WikiFame is a personal script
-that page is `User:<name>/wikifame-config.json`, next to the script itself, which keeps setup free
-of any rights requirement; a site-wide gadget would move it to `MediaWiki:Wikifame-config.json`. A
+in an on-wiki JSON page, so they change without a deployment. While WikiPeople is a personal script
+that page is `User:<name>/wikipeople-config.json`, next to the script itself, which keeps setup free
+of any rights requirement; a site-wide gadget would move it to `MediaWiki:Wikipeople-config.json`. A
 missing page yields the built-in defaults, and per-wiki defaults are published in `config/`.
 
 Customisation beyond settings is deliberately not expressed in that JSON. `historyIntroPage` names
@@ -34,7 +34,7 @@ configuration page is executed or treated as markup, which is what keeps it revi
 it. See [ADR-0004](decisions/0004-on-wiki-extensibility.md).
 
 That page is parsed once and reused for every article, so per-article values cannot live in it. It
-declares a slot — an element classed `wikifame-count` or `wikifame-number` — whose text the gadget
+declares a slot — an element classed `wikipeople-count` or `wikipeople-number` — whose text the gadget
 replaces with this article's contributor count, keeping the page's own wording as the fallback. A
 page declaring no slot issues no request, so history views stay free unless someone opts in, and
 the count shares the article view's page-keyed session cache rather than adding a second call.
@@ -205,7 +205,7 @@ short retention and must never be repurposed as reader profiles.
 
 Attribution is public page-history data, but a credit under an article title is not the same act
 as a page history, and it is not always welcome. Each wiki therefore maintains a list of articles
-WikiFame counts but does not name, at `Project:WikiFame/opt-out` in its own project namespace. The
+WikiPeople counts but does not name, at `Project:WikiPeople/opt-out` in its own project namespace. The
 `optout-sync` job materialises that list into `page_optout`; the API applies it while building
 every ready response, on both endpoints, so it cannot be sidestepped by the gadget or by a direct
 request. An opted-out article still reports its full `distinct_contributors`. Nothing is deleted:
@@ -242,6 +242,6 @@ stays fresh. `distinct_contributors` is unchanged and the dropped share moves in
   token provenance at all, so the dividing line is the project, not the language.
 - Database-name resolution assumes every WikiWho language code is dash-free. A dashed code such
   as `be-tarask`, or coverage beyond Wikipedia, would require a real sitematrix lookup in
-  `wikifame/sites.py`.
+  `wikipeople/sites.py`.
 - Toolforge is the prototype host. A default gadget for all readers requires a Wikimedia-scale
   request path and privacy review.

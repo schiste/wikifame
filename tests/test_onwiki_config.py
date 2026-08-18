@@ -10,7 +10,7 @@ import re
 from pathlib import Path
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
-GADGET_SOURCE = (REPOSITORY_ROOT / "wikifame.js").read_text(encoding="utf-8")
+GADGET_SOURCE = (REPOSITORY_ROOT / "wikipeople.js").read_text(encoding="utf-8")
 SETUP_GUIDE = (REPOSITORY_ROOT / "docs/onwiki-setup.md").read_text(encoding="utf-8")
 DEFAULTS = sorted((REPOSITORY_ROOT / "config").glob("*.json"))
 
@@ -31,7 +31,7 @@ def _config_keys() -> set[str]:
 
 
 def _message_keys() -> set[str]:
-    return set(re.findall(r"'(wikifame-[a-z-]+)':", _block(GADGET_SOURCE, "MESSAGES = {")))
+    return set(re.findall(r"'(wikipeople-[a-z-]+)':", _block(GADGET_SOURCE, "MESSAGES = {")))
 
 
 def test_defaults_are_published_for_the_wikis_the_gadget_already_speaks() -> None:
@@ -74,4 +74,4 @@ def test_setup_guide_names_the_page_the_gadget_actually_fetches() -> None:
     assert suffix is not None
     assert suffix.group(1).lstrip("/") in SETUP_GUIDE
     # The guide must not send people to a page only interface admins can create.
-    assert "MediaWiki:Wikifame-config.json" not in SETUP_GUIDE.split("## Later", 1)[0]
+    assert "MediaWiki:Wikipeople-config.json" not in SETUP_GUIDE.split("## Later", 1)[0]

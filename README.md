@@ -1,6 +1,6 @@
-# WikiFame
+# WikiPeople
 
-WikiFame makes the people behind Wikipedia articles visible. Its first interface is a MediaWiki
+WikiPeople makes the people behind Wikipedia articles visible. Its first interface is a MediaWiki
 gadget that displays a short attribution below an article title:
 
 > Article rédigé par Alice, Bob, Charlie et 44 autres personnes.
@@ -20,14 +20,14 @@ and their daughter**. This project turns their family idea into an open Wikimedi
 
 ## Components
 
-- `wikifame.js` and `wikifame.css`: wiki-agnostic, localised personal-script prototype.
-- `src/wikifame/sites.py`: resolves a database name to a WikiWho language and Wikipedia host.
-- `src/wikifame/app.py`: read-only FastAPI service for the gadget.
-- `src/wikifame/worker.py`: durable WikiWho calculation worker.
-- `src/wikifame/prewarm.py`: preloads popular articles from Wikimedia pageviews.
-- `src/wikifame/backfill.py`: resumable, low-priority long-tail coverage.
-- `src/wikifame/cleanup.py`: queue and old-revision retention.
-- `src/wikifame/optout.py`: reads each wiki's on-wiki opt-out list into servable rows.
+- `wikipeople.js` and `wikipeople.css`: wiki-agnostic, localised personal-script prototype.
+- `src/wikipeople/sites.py`: resolves a database name to a WikiWho language and Wikipedia host.
+- `src/wikipeople/app.py`: read-only FastAPI service for the gadget.
+- `src/wikipeople/worker.py`: durable WikiWho calculation worker.
+- `src/wikipeople/prewarm.py`: preloads popular articles from Wikimedia pageviews.
+- `src/wikipeople/backfill.py`: resumable, low-priority long-tail coverage.
+- `src/wikipeople/cleanup.py`: queue and old-revision retention.
+- `src/wikipeople/optout.py`: reads each wiki's on-wiki opt-out list into servable rows.
 
 The gadget uses a page-level result for up to 90 days. After that period, the API serves the
 last known attribution while a worker refreshes it asynchronously. Stored results still record
@@ -76,7 +76,7 @@ Python 3.11 or newer is required.
 python -m venv .venv
 .venv/bin/pip install -e '.[dev]'
 cp .env.example .env
-.venv/bin/uvicorn wikifame.app:app --reload
+.venv/bin/uvicorn wikipeople.app:app --reload
 ```
 
 Environment variables are read directly by the process. Export the values from `.env` with the
@@ -85,9 +85,9 @@ environment manager of your choice; the application intentionally does not load 
 Initialize and exercise the asynchronous path:
 
 ```bash
-.venv/bin/python -c 'from wikifame.runtime import build_runtime; build_runtime().database.create_schema()'
-.venv/bin/python -m wikifame.worker --once
-.venv/bin/python -m wikifame.prewarm --days 1
+.venv/bin/python -c 'from wikipeople.runtime import build_runtime; build_runtime().database.create_schema()'
+.venv/bin/python -m wikipeople.worker --once
+.venv/bin/python -m wikipeople.prewarm --days 1
 ```
 
 Run the test suite:
@@ -99,14 +99,14 @@ Run the test suite:
 ## Personal-script installation
 
 Copy the repository files to your user-page subpages on any covered Wikipedia — for example
-`User:YOUR_USERNAME/wikifame.js` and `User:YOUR_USERNAME/wikifame.css`, or their localised
+`User:YOUR_USERNAME/wikipeople.js` and `User:YOUR_USERNAME/wikipeople.css`, or their localised
 namespace name such as `Utilisateur:` on French Wikipedia. Optionally add
-`User:YOUR_USERNAME/wikifame-config.json` from [`config/`](config). Then load the first two from
+`User:YOUR_USERNAME/wikipeople-config.json` from [`config/`](config). Then load the first two from
 your `common.js`:
 
 ```javascript
-importScript( 'User:YOUR_USERNAME/wikifame.js' );
-importStylesheet( 'User:YOUR_USERNAME/wikifame.css' );
+importScript( 'User:YOUR_USERNAME/wikipeople.js' );
+importStylesheet( 'User:YOUR_USERNAME/wikipeople.css' );
 ```
 
 The same unmodified files work on every wiki. Where the API does not serve a wiki, the script
@@ -117,7 +117,7 @@ the same attribution and attempt to render a summary.
 
 ## Per-wiki configuration
 
-Alongside the script, you can create `User:YOUR_USERNAME/wikifame-config.json` on the same wiki. It
+Alongside the script, you can create `User:YOUR_USERNAME/wikipeople-config.json` on the same wiki. It
 is optional — without it the script uses its built-in text in your interface language. Its one real
 job is supplying the two local titles the script cannot guess:
 
@@ -136,9 +136,9 @@ Defaults per wiki are published in [`config/`](config): [`enwiki.json`](config/e
 [`frwiki.json`](config/frwiki.json). Copy the one for your wiki; send a pull request if you work
 out the titles for a wiki that has none yet.
 
-Keeping this in user space means installing and configuring WikiFame needs no special rights. When
+Keeping this in user space means installing and configuring WikiPeople needs no special rights. When
 a community adopts it as a site-wide gadget, the same file moves to
-`MediaWiki:Wikifame-config.json`.
+`MediaWiki:Wikipeople-config.json`.
 
 Full instructions, field reference, and troubleshooting: [on-wiki setup](docs/onwiki-setup.md).
 
@@ -150,7 +150,7 @@ express:
 - `historyIntroPage` names a **wikitext page** whose parsed content replaces the history-box text.
   Images, galleries, Commons video, and templates all work, because MediaWiki does the parsing and
   the sanitising. Translations go on `/fr`-style language subpages.
-- `mw.hook( 'wikifame.history' )` and `mw.hook( 'wikifame.summary' )` fire with the rendered
+- `mw.hook( 'wikipeople.history' )` and `mw.hook( 'wikipeople.summary' )` fire with the rendered
   element, so arbitrary JavaScript goes in your own `common.js` rather than in a configuration
   page.
 
@@ -160,12 +160,12 @@ Nothing in a configuration page is ever executed or treated as markup. See
 ## Toolforge deployment
 
 Follow the [operations runbook](docs/operations.md). Deployment requires a Toolforge tool,
-ToolsDB database, maintainer contact in `WIKIFAME_USER_AGENT`, Build Service image, webservice,
+ToolsDB database, maintainer contact in `WIKIPEOPLE_USER_AGENT`, Build Service image, webservice,
 and the jobs declared in `jobs.yaml`. Toolforge-injected `TOOL_TOOLSDB_USER` and
 `TOOL_TOOLSDB_PASSWORD` are used automatically; `DATABASE_URL` remains an explicit override.
 
 ## License
 
-WikiFame is licensed under the [GNU Affero General Public License v3.0](LICENSE). WikiWho API data
+WikiPeople is licensed under the [GNU Affero General Public License v3.0](LICENSE). WikiWho API data
 is published separately under CC BY-SA 4.0, and Wikimedia content remains subject to its own
 licenses and terms.

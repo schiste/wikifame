@@ -11,9 +11,9 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from wikifame.models import AttributionResult, utcnow
-from wikifame.policy import is_nameable_account
-from wikifame.runtime import Runtime, build_runtime
+from wikipeople.models import AttributionResult, utcnow
+from wikipeople.policy import is_nameable_account
+from wikipeople.runtime import Runtime, build_runtime
 
 
 def _isoformat(value: Any) -> str:
@@ -122,9 +122,9 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         yield
 
     app = FastAPI(
-        title="WikiFame API",
+        title="WikiPeople API",
         version="0.1.0",
-        description="Cached WikiWho attribution for the WikiFame gadget",
+        description="Cached WikiWho attribution for the WikiPeople gadget",
         lifespan=lifespan,
     )
     app.state.runtime = app_runtime
@@ -192,7 +192,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             headers = {
                 "Cache-Control": f"public, max-age={settings.ready_cache_seconds}",
                 "ETag": _etag(payload),
-                "X-WikiFame-Algorithm": settings.algorithm_version,
+                "X-WikiPeople-Algorithm": settings.algorithm_version,
             }
             if _if_none_match(request.headers.get("if-none-match"), headers["ETag"]):
                 return Response(status_code=304, headers=headers)
@@ -305,8 +305,8 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                     f"stale-while-revalidate={settings.page_stale_while_revalidate_seconds}"
                 ),
                 "ETag": _etag(payload),
-                "X-WikiFame-Algorithm": settings.algorithm_version,
-                "X-WikiFame-Source-Revision": str(result.revision_id),
+                "X-WikiPeople-Algorithm": settings.algorithm_version,
+                "X-WikiPeople-Source-Revision": str(result.revision_id),
             }
             # The enqueue above has already happened, so a 304 still keeps a stale page
             # moving towards being recomputed. Only the body is spared.

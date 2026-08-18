@@ -4,9 +4,9 @@ import argparse
 import logging
 from datetime import UTC, date, datetime, timedelta
 
-from wikifame.clients import AnalyticsClient, MediaWikiClient
-from wikifame.errors import RetryableUpstreamError, WikiFameError
-from wikifame.runtime import Runtime, build_runtime
+from wikipeople.clients import AnalyticsClient, MediaWikiClient
+from wikipeople.errors import RetryableUpstreamError, WikiPeopleError
+from wikipeople.runtime import Runtime, build_runtime
 
 LOGGER = logging.getLogger(__name__)
 
@@ -107,7 +107,7 @@ def main() -> None:
         for wiki in wikis:
             try:
                 total += prewarm_wiki(runtime, analytics, mediawiki, wiki, max(1, args.days))
-            except WikiFameError as error:
+            except WikiPeopleError as error:
                 # One unavailable wiki must not cancel prewarming for the others.
                 LOGGER.warning("%s: prewarm skipped (%s)", wiki, error)
         LOGGER.info("queued %s pages across %s wikis", total, len(wikis))

@@ -26,7 +26,7 @@ Two further facts shaped the decision:
 
 ### Capability is derived, not configured
 
-`wikifame.sites.SiteResolver` strips the `wiki` suffix from a database name and checks the
+`wikipeople.sites.SiteResolver` strips the `wiki` suffix from a database name and checks the
 result against the set of WikiWho language codes. This answers both "can we analyse this
 wiki" and "what host do we call" without any network request, which preserves the invariant
 that the FastAPI process never contacts an upstream service.
@@ -83,15 +83,15 @@ Per-wiki settings live in an on-wiki JSON page:
 The page is optional; a missing page yields the built-in defaults. Per-wiki defaults are
 published in `config/` for people to copy.
 
-While WikiFame is a **personal script**, that page is `User:<name>/wikifame-config.json`,
+While WikiPeople is a **personal script**, that page is `User:<name>/wikipeople-config.json`,
 resolved from `wgUserName` and namespace 2 so the localised namespace name is correct on
 every wiki. The reader and the installer are the same person, so this keeps installation and
 configuration free of any rights requirement — nobody has to find an interface administrator
-to try the tool. It also sits next to `wikifame.js` and `wikifame.css`, which is where people
+to try the tool. It also sits next to `wikipeople.js` and `wikipeople.css`, which is where people
 will look for it.
 
-Should WikiFame become a **site-wide gadget**, the page moves to
-`MediaWiki:Wikifame-config.json`: one shared copy, in a namespace where changing what every
+Should WikiPeople become a **site-wide gadget**, the page moves to
+`MediaWiki:Wikipeople-config.json`: one shared copy, in a namespace where changing what every
 reader sees requires the same rights as changing any other interface message. Only
 `CONFIG_PAGE_SUFFIX` and `configPage()` change.
 
@@ -116,4 +116,4 @@ gadget step, when one page would serve readers of many interface languages.
   change what an unauthenticated scripted client could already do.
 - Non-Wikipedia projects remain out of scope for as long as WikiWho covers Wikipedia only.
 - A dashed WikiWho code, or coverage beyond Wikipedia, would break the suffix rule.
-  `wikifame/sites.py` is the single place where a real sitematrix lookup would replace it.
+  `wikipeople/sites.py` is the single place where a real sitematrix lookup would replace it.

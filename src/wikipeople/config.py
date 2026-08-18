@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from urllib.parse import quote_plus
 
-from wikifame.sites import ALL_WIKIS, DEFAULT_WIKIWHO_LANGUAGES
+from wikipeople.sites import ALL_WIKIS, DEFAULT_WIKIWHO_LANGUAGES
 
 
 def _csv(value: str) -> tuple[str, ...]:
@@ -42,13 +42,13 @@ def _database_url() -> str:
     toolsdb_user = os.getenv("TOOL_TOOLSDB_USER")
     toolsdb_password = os.getenv("TOOL_TOOLSDB_PASSWORD")
     if toolsdb_user and toolsdb_password:
-        database_name = os.getenv("TOOLSDB_DATABASE", f"{toolsdb_user}__wikifame")
+        database_name = os.getenv("TOOLSDB_DATABASE", f"{toolsdb_user}__wikipeople")
         return (
             f"mysql+pymysql://{quote_plus(toolsdb_user)}:{quote_plus(toolsdb_password)}"
             f"@tools.db.svc.wikimedia.cloud/{quote_plus(database_name)}?charset=utf8mb4"
         )
 
-    return "sqlite:///./wikifame.db"
+    return "sqlite:///./wikipeople.db"
 
 
 @dataclass(frozen=True)
@@ -105,8 +105,8 @@ class Settings:
         return cls(
             database_url=_database_url(),
             user_agent=os.getenv(
-                "WIKIFAME_USER_AGENT",
-                "WikiFame/0.1 (https://github.com/schiste/wikifame)",
+                "WIKIPEOPLE_USER_AGENT",
+                "WikiPeople/0.1 (https://github.com/schiste/wikifame)",
             ),
             # v2 adds the edit-count fallback below the token metric (ADR-0005). The name
             # dropped "surviving-tokens" because that is now one rung of a ladder rather
@@ -166,7 +166,7 @@ class Settings:
             # to whatever the local project namespace is called — "Wikipédia:" on frwiki,
             # "Wikipedia:" on enwiki, "פרויקט:" on hewiki — so a community finds the list
             # where it would expect to and no per-wiki table has to be kept in step.
-            optout_page=os.getenv("OPTOUT_PAGE", "Project:WikiFame/opt-out"),
+            optout_page=os.getenv("OPTOUT_PAGE", "Project:WikiPeople/opt-out"),
             # A ceiling on how far one line of a list page can reach. Categories are not
             # walked recursively, so this only bites on a genuinely enormous flat
             # category; the sync logs the truncation rather than silently covering part

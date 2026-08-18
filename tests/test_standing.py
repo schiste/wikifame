@@ -5,15 +5,15 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from wikifame.app import create_app
-from wikifame.clients import GlobalUserInfo
-from wikifame.config import Settings, _int_by_wiki
-from wikifame.errors import RetryableUpstreamError
-from wikifame.models import utcnow
-from wikifame.policy import AccountStanding, is_nameable_account
-from wikifame.repository import StandingRecord
-from wikifame.runtime import build_runtime
-from wikifame.standing import sync_wiki
+from wikipeople.app import create_app
+from wikipeople.clients import GlobalUserInfo
+from wikipeople.config import Settings, _int_by_wiki
+from wikipeople.errors import RetryableUpstreamError
+from wikipeople.models import utcnow
+from wikipeople.policy import AccountStanding, is_nameable_account
+from wikipeople.repository import StandingRecord
+from wikipeople.runtime import build_runtime
+from wikipeople.standing import sync_wiki
 
 NOW = utcnow()
 DAY = timedelta(days=1)
@@ -192,7 +192,7 @@ def test_a_lock_imposed_as_a_courtesy_leaves_the_name(reason: str) -> None:
 def test_a_block_imposed_as_a_courtesy_leaves_the_name(reason: str) -> None:
     """The block-side mirror of the memorial lock, and the same mistake.
 
-    Every string here is a real block reason carried by an account WikiFame names.
+    Every string here is a real block reason carried by an account WikiPeople names.
     Someone blocked at their own request asked to be stopped from editing, which is the
     opposite of a wiki withdrawing its trust; someone whose password was stolen did
     nothing at all. Neither has forfeited the credit for what they wrote.
@@ -437,7 +437,7 @@ def test_an_opted_out_page_costs_no_standing_lookup(tmp_path: Path) -> None:
     """The names are already gone, so there is nothing left to filter."""
     runtime = make_runtime(tmp_path, "optout.db")
     save(runtime, 100, CONTRIBUTORS)
-    from wikifame.repository import OptOutEntry
+    from wikipeople.repository import OptOutEntry
 
     runtime.repository.replace_optout(
         "frwiki", [OptOutEntry(page_id=100, title="Exemple", source="page")]

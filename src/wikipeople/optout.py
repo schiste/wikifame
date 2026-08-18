@@ -17,10 +17,10 @@ import argparse
 import logging
 import re
 
-from wikifame.clients import MediaWikiClient
-from wikifame.errors import WikiFameError
-from wikifame.repository import OptOutEntry
-from wikifame.runtime import Runtime, build_runtime
+from wikipeople.clients import MediaWikiClient
+from wikipeople.errors import WikiPeopleError
+from wikipeople.repository import OptOutEntry
+from wikipeople.runtime import Runtime, build_runtime
 
 LOGGER = logging.getLogger(__name__)
 
@@ -155,7 +155,7 @@ def resolve_target_wikis(runtime: Runtime, explicit: str | None) -> list[str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Sync the on-wiki WikiFame opt-out lists")
+    parser = argparse.ArgumentParser(description="Sync the on-wiki WikiPeople opt-out lists")
     parser.add_argument("--wiki", default=None, help="Sync one wiki instead of every active one")
     parser.add_argument(
         "--dry-run",
@@ -180,7 +180,7 @@ def main() -> None:
         for wiki in wikis:
             try:
                 covered += sync_wiki(runtime, mediawiki, wiki, args.dry_run)[0]
-            except WikiFameError as error:
+            except WikiPeopleError as error:
                 # One unreachable wiki keeps its previous list rather than losing it.
                 LOGGER.warning("%s: opt-out sync skipped, list unchanged (%s)", wiki, error)
         LOGGER.info("%s articles opted out across %s wikis", covered, len(wikis))

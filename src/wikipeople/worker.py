@@ -8,17 +8,17 @@ import socket
 import time
 from typing import Any
 
-from wikifame.attribution import (
+from wikipeople.attribution import (
     candidate_user_ids,
     count_tokens,
     select_contributors,
     select_top_editors,
 )
-from wikifame.clients import MediaWikiClient, PageMetadata, WikiWhoClient
-from wikifame.errors import PermanentDataError, WikiFameError
-from wikifame.models import utcnow
-from wikifame.repository import Repository, WorkLease
-from wikifame.runtime import Runtime, build_runtime
+from wikipeople.clients import MediaWikiClient, PageMetadata, WikiWhoClient
+from wikipeople.errors import PermanentDataError, WikiPeopleError
+from wikipeople.models import utcnow
+from wikipeople.repository import Repository, WorkLease
+from wikipeople.runtime import Runtime, build_runtime
 
 LOGGER = logging.getLogger(__name__)
 METRIC_TOKENS = "wikiwho-surviving-alphanumeric-tokens"
@@ -63,7 +63,7 @@ class Worker:
         )
         try:
             self.process(lease)
-        except WikiFameError as error:
+        except WikiPeopleError as error:
             LOGGER.warning("job failed code=%s error=%s", error.code, error)
             self.repository.fail(
                 lease,
@@ -230,7 +230,7 @@ class Worker:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Process WikiFame attribution jobs")
+    parser = argparse.ArgumentParser(description="Process WikiPeople attribution jobs")
     parser.add_argument("--once", action="store_true", help="Process at most one job")
     args = parser.parse_args()
     logging.basicConfig(

@@ -1,13 +1,13 @@
-class WikiFameError(Exception):
-    code = "wikifame_error"
+class WikiPeopleError(Exception):
+    code = "wikipeople_error"
     permanent = False
 
 
-class RetryableUpstreamError(WikiFameError):
+class RetryableUpstreamError(WikiPeopleError):
     code = "upstream_unavailable"
 
 
-class PermanentDataError(WikiFameError):
+class PermanentDataError(WikiPeopleError):
     code = "invalid_page"
     permanent = True
 

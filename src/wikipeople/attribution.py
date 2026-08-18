@@ -4,7 +4,7 @@ from collections import Counter
 from collections.abc import Iterable, Mapping
 from typing import Any
 
-from wikifame.policy import (
+from wikipeople.policy import (
     GlobalGroupLookup,
     ResolvedUser,
     is_countable_token,

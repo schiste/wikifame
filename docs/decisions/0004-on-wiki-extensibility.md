@@ -17,7 +17,7 @@ have the gadget execute it. That is worth rejecting explicitly, because the usua
 against it does not apply here.
 
 **It is not a privilege escalation.** The configuration page lives in the reader's own
-user space, so whoever can write it can already edit their copy of `wikifame.js`. At the
+user space, so whoever can write it can already edit their copy of `wikipeople.js`. At the
 gadget step both pages sit in the `MediaWiki:` namespace behind the same interface-admin
 right. Executing configuration-supplied code grants nobody anything they did not have.
 
@@ -37,7 +37,7 @@ review.
 
 ### Settings stay declarative
 
-`wikifame-config.json` holds booleans, page titles, and message strings. Nothing in it is
+`wikipeople-config.json` holds booleans, page titles, and message strings. Nothing in it is
 ever executed or interpreted as markup. It remains the easy path: copy a file from
 `config/`, change nothing, and everything works.
 
@@ -67,7 +67,7 @@ Two guarantees are kept in the gadget rather than delegated:
 
 ### JavaScript is a hook
 
-`mw.hook( 'wikifame.history' )` and `mw.hook( 'wikifame.summary' )` fire with the rendered
+`mw.hook( 'wikipeople.history' )` and `mw.hook( 'wikipeople.summary' )` fire with the rendered
 element. Arbitrary JavaScript belongs in the reader's own `common.js`, which is the
 idiomatic MediaWiki extension point, costs two lines here, and is strictly more powerful
 than anything a configuration page could express.
@@ -84,7 +84,7 @@ than anything a configuration page could express.
   for 24 hours so that an unwritten page does not cost three lookups per view.
 - A 24-hour negative cache means pointing at a page before creating it delays it by up to a
   day for an already-open tab.
-- `wikifame.css` now has to contain foreign markup: parser output is scoped and its media
+- `wikipeople.css` now has to contain foreign markup: parser output is scoped and its media
   constrained, but a deliberately oversized image can still make the box ugly.
 - Commons video degrades to a plain player where TimedMediaHandler is absent.
 - At the gadget step this scales better than JSON-embedded markup would: a wikitext page in

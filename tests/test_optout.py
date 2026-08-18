@@ -4,17 +4,17 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from wikifame.app import create_app
-from wikifame.clients import CategoryMember, TitleInfo
-from wikifame.config import Settings
-from wikifame.errors import RetryableUpstreamError
-from wikifame.models import utcnow
-from wikifame.optout import collect_entries, parse_optout_page, resolve_target_wikis, sync_wiki
-from wikifame.runtime import Runtime, build_runtime
+from wikipeople.app import create_app
+from wikipeople.clients import CategoryMember, TitleInfo
+from wikipeople.config import Settings
+from wikipeople.errors import RetryableUpstreamError
+from wikipeople.models import utcnow
+from wikipeople.optout import collect_entries, parse_optout_page, resolve_target_wikis, sync_wiki
+from wikipeople.runtime import Runtime, build_runtime
 
 PAGE = """
-Cette page liste les articles dont WikiFame n'affiche pas les noms.
-La discussion se fait en [[Discussion Wikipédia:WikiFame/opt-out|page de discussion]].
+Cette page liste les articles dont WikiPeople n'affiche pas les noms.
+La discussion se fait en [[Discussion Wikipédia:WikiPeople/opt-out|page de discussion]].
 
 == Articles ==
 * [[Jean Dupont]]
@@ -24,7 +24,7 @@ La discussion se fait en [[Discussion Wikipédia:WikiFame/opt-out|page de discus
 == Catégories ==
 * [[:Catégorie:Personnalité vivante]]
 
-Voir aussi [[Wikipédia:WikiFame]] pour le fonctionnement.
+Voir aussi [[Wikipédia:WikiPeople]] pour le fonctionnement.
 """
 
 
@@ -152,7 +152,7 @@ def _runtime(tmp_path: Path, name: str = "optout.db") -> Runtime:
         Settings.from_env(),
         database_url=f"sqlite:///{tmp_path / name}",
         algorithm_version="test-optout",
-        optout_page="Project:WikiFame/opt-out",
+        optout_page="Project:WikiPeople/opt-out",
     )
     runtime = build_runtime(settings)
     runtime.database.create_schema()

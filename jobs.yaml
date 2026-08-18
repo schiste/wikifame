@@ -1,40 +1,40 @@
 ---
 - name: attribution-worker
-  image: tool-wikifame/tool-wikifame:latest
+  image: tool-wikipeople/tool-wikipeople:latest
   command: worker
   continuous: true
   replicas: 2
   emails: onfailure
 
 - name: popular-prewarm
-  image: tool-wikifame/tool-wikifame:latest
+  image: tool-wikipeople/tool-wikipeople:latest
   command: prewarm
   schedule: "@daily"
   timeout: 3600
   emails: onfailure
 - name: gradual-backfill
-  image: tool-wikifame/tool-wikifame:latest
+  image: tool-wikipeople/tool-wikipeople:latest
   command: backfill
   schedule: "@hourly"
   timeout: 1800
   emails: onfailure
 
 - name: cache-cleanup
-  image: tool-wikifame/tool-wikifame:latest
+  image: tool-wikipeople/tool-wikipeople:latest
   command: cleanup
   schedule: "@weekly"
   timeout: 3600
   emails: onfailure
 
 - name: optout-sync
-  image: tool-wikifame/tool-wikifame:latest
+  image: tool-wikipeople/tool-wikipeople:latest
   command: optout
   schedule: "*/15 * * * *"
   timeout: 900
   emails: onfailure
 
 - name: standing-sync
-  image: tool-wikifame/tool-wikifame:latest
+  image: tool-wikipeople/tool-wikipeople:latest
   command: standing
   schedule: "17 * * * *"
   timeout: 1800

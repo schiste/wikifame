@@ -1,4 +1,4 @@
-"""Which wikis WikiFame can serve, and how to reach them.
+"""Which wikis WikiPeople can serve, and how to reach them.
 
 WikiWho publishes one API per Wikipedia language edition. Every language code it
 covers is dash-free, so a Wikimedia database name maps to a host by simple suffix
@@ -18,7 +18,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from wikifame.errors import PermanentDataError
+from wikipeople.errors import PermanentDataError
 
 WIKI_SUFFIX = "wiki"
 ALL_WIKIS = "*"

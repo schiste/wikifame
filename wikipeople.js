@@ -1,19 +1,19 @@
 /* global mw */
 /**
- * WikiFame — names the people who wrote the text you are reading.
+ * WikiPeople — names the people who wrote the text you are reading.
  *
  * The script is wiki-agnostic: it reports its own wiki through wgDBname and lets the
  * API decide whether that wiki is served. An unsupported wiki answers 404, the fetch
  * rejects, and nothing is rendered — so this same file can ship on every Wikipedia
  * while the backend enables wikis one at a time.
  *
- * Wording and help links come from the reader's own User:<name>/wikifame-config.json
- * on the local wiki, alongside the script itself. While WikiFame is a personal script
+ * Wording and help links come from the reader's own User:<name>/wikipeople-config.json
+ * on the local wiki, alongside the script itself. While WikiPeople is a personal script
  * the reader and the installer are the same person, so no interface-admin rights are
  * needed and each wiki gets its own copy. The page is optional: without it the
  * built-in defaults apply. Defaults per wiki are published in the repository.
  *
- * When this becomes a site-wide gadget the page moves to MediaWiki:Wikifame-config.json
+ * When this becomes a site-wide gadget the page moves to MediaWiki:Wikipeople-config.json
  * and only CONFIG_PAGE_SUFFIX and configPage() change.
  *
  * Two extension points exist so that nobody has to fork this file:
@@ -21,21 +21,21 @@
  *   historyIntroPage  a wikitext page whose parsed HTML replaces the built-in history
  *                     introduction. Images, galleries, Commons video and templates all
  *                     work, because MediaWiki does the parsing and the sanitising.
- *   count slots       an element of class wikifame-count or wikifame-number in that page
+ *   count slots       an element of class wikipeople-count or wikipeople-number in that page
  *                     receives this article's contributor count, which the page itself
  *                     cannot hold: it is parsed once and cached for every article.
- *   mw.hook           'wikifame.history' and 'wikifame.summary' fire with the rendered
+ *   mw.hook           'wikipeople.history' and 'wikipeople.summary' fire with the rendered
  *                     element, so arbitrary JavaScript belongs in the reader's own
  *                     common.js rather than in a configuration page.
  */
 ( function () {
 	'use strict';
 
-	var ARTICLE_SUMMARY_ID = 'wikifame-summary';
-	var HISTORY_INTRO_ID = 'wikifame-history-intro';
+	var ARTICLE_SUMMARY_ID = 'wikipeople-summary';
+	var HISTORY_INTRO_ID = 'wikipeople-history-intro';
 	var CACHE_VERSION = 'v2';
-	var TOOLFORGE_API_BASE = 'https://wikifame.toolforge.org';
-	var CONFIG_PAGE_SUFFIX = '/wikifame-config.json';
+	var TOOLFORGE_API_BASE = 'https://wikipeople.toolforge.org';
+	var CONFIG_PAGE_SUFFIX = '/wikipeople-config.json';
 	var REQUEST_TIMEOUT_MS = 8000;
 	// Deliberately short, and deliberately the same number the API puts in its max-age.
 	// This cache exists to spare a second request when a reader moves between an article
@@ -88,52 +88,52 @@
 	 */
 	var MESSAGES = {
 		en: {
-			'wikifame-summary-prefix': 'Article written by ',
+			'wikipeople-summary-prefix': 'Article written by ',
 			// A different measurement deserves a different claim: these accounts edited
 			// the page most often, which is not the same as having written what is on it.
-			'wikifame-summary-prefix-edits': 'Article most edited by ',
-			'wikifame-people': '{{PLURAL:$1|$1 person|$1 people}}',
-			'wikifame-others': '{{PLURAL:$1|$1 other person|$1 other people}}',
-			'wikifame-at-least': 'at least $1',
+			'wikipeople-summary-prefix-edits': 'Article most edited by ',
+			'wikipeople-people': '{{PLURAL:$1|$1 person|$1 people}}',
+			'wikipeople-others': '{{PLURAL:$1|$1 other person|$1 other people}}',
+			'wikipeople-at-least': 'at least $1',
 			// Says what the gadget is doing, not what the article is. Nothing here may
 			// resemble an answer: it is on screen before one exists.
-			'wikifame-pending': 'Analysing contributions…',
-			'wikifame-many-people': 'many people',
-			'wikifame-user-title': 'View the user page of $1',
-			'wikifame-share': '$1 of the currently visible tokens',
-			'wikifame-share-edits': '$1 of the edits to this page',
-			'wikifame-history-title': 'View the full page history',
-			'wikifame-tooltip': 'Main authors of the text according to WikiWho.',
-			'wikifame-tooltip-edits': 'Accounts that edited this page most, from its history. The text itself could not be analysed.',
-			'wikifame-computed': 'Data computed on $1.',
-			'wikifame-history-intro': 'Each line is one version of the article, showing who changed it.',
-			'wikifame-history-help': 'To get started, read $1 or practise in $2.',
-			'wikifame-history-help-label': 'the editing help',
-			'wikifame-history-sandbox-label': 'the sandbox',
-			'wikifame-history-edit': 'You can also $1.',
-			'wikifame-history-edit-label': 'edit this article directly'
+			'wikipeople-pending': 'Analysing contributions…',
+			'wikipeople-many-people': 'many people',
+			'wikipeople-user-title': 'View the user page of $1',
+			'wikipeople-share': '$1 of the currently visible tokens',
+			'wikipeople-share-edits': '$1 of the edits to this page',
+			'wikipeople-history-title': 'View the full page history',
+			'wikipeople-tooltip': 'Main authors of the text according to WikiWho.',
+			'wikipeople-tooltip-edits': 'Accounts that edited this page most, from its history. The text itself could not be analysed.',
+			'wikipeople-computed': 'Data computed on $1.',
+			'wikipeople-history-intro': 'Each line is one version of the article, showing who changed it.',
+			'wikipeople-history-help': 'To get started, read $1 or practise in $2.',
+			'wikipeople-history-help-label': 'the editing help',
+			'wikipeople-history-sandbox-label': 'the sandbox',
+			'wikipeople-history-edit': 'You can also $1.',
+			'wikipeople-history-edit-label': 'edit this article directly'
 		},
 		fr: {
-			'wikifame-summary-prefix': 'Article rédigé par ',
-			'wikifame-summary-prefix-edits': 'Article le plus modifié par ',
-			'wikifame-people': '{{PLURAL:$1|$1 personne|$1 personnes}}',
-			'wikifame-others': '{{PLURAL:$1|$1 autre personne|$1 autres personnes}}',
-			'wikifame-at-least': 'au moins $1',
-			'wikifame-pending': 'Analyse des contributions…',
-			'wikifame-many-people': 'de nombreuses personnes',
-			'wikifame-user-title': 'Voir la page utilisateur de $1',
-			'wikifame-share': '$1 des tokens actuellement visibles',
-			'wikifame-share-edits': '$1 des modifications de la page',
-			'wikifame-history-title': 'Voir l’historique complet de l’article',
-			'wikifame-tooltip': 'Principaux contributeurs du texte selon WikiWho.',
-			'wikifame-tooltip-edits': 'Comptes ayant le plus modifié cette page, d’après son historique. Le texte lui-même n’a pas pu être analysé.',
-			'wikifame-computed': 'Données calculées le $1.',
-			'wikifame-history-intro': 'Chaque ligne correspond à une version de l’article et indique qui l’a modifiée.',
-			'wikifame-history-help': 'Pour commencer, consultez $1 ou entraînez-vous dans $2.',
-			'wikifame-history-help-label': 'l’aide à la modification',
-			'wikifame-history-sandbox-label': 'le bac à sable',
-			'wikifame-history-edit': 'Vous pouvez aussi $1.',
-			'wikifame-history-edit-label': 'modifier directement cet article'
+			'wikipeople-summary-prefix': 'Article rédigé par ',
+			'wikipeople-summary-prefix-edits': 'Article le plus modifié par ',
+			'wikipeople-people': '{{PLURAL:$1|$1 personne|$1 personnes}}',
+			'wikipeople-others': '{{PLURAL:$1|$1 autre personne|$1 autres personnes}}',
+			'wikipeople-at-least': 'au moins $1',
+			'wikipeople-pending': 'Analyse des contributions…',
+			'wikipeople-many-people': 'de nombreuses personnes',
+			'wikipeople-user-title': 'Voir la page utilisateur de $1',
+			'wikipeople-share': '$1 des tokens actuellement visibles',
+			'wikipeople-share-edits': '$1 des modifications de la page',
+			'wikipeople-history-title': 'Voir l’historique complet de l’article',
+			'wikipeople-tooltip': 'Principaux contributeurs du texte selon WikiWho.',
+			'wikipeople-tooltip-edits': 'Comptes ayant le plus modifié cette page, d’après son historique. Le texte lui-même n’a pas pu être analysé.',
+			'wikipeople-computed': 'Données calculées le $1.',
+			'wikipeople-history-intro': 'Chaque ligne correspond à une version de l’article et indique qui l’a modifiée.',
+			'wikipeople-history-help': 'Pour commencer, consultez $1 ou entraînez-vous dans $2.',
+			'wikipeople-history-help-label': 'l’aide à la modification',
+			'wikipeople-history-sandbox-label': 'le bac à sable',
+			'wikipeople-history-edit': 'Vous pouvez aussi $1.',
+			'wikipeople-history-edit-label': 'modifier directement cet article'
 		}
 	};
 
@@ -187,7 +187,7 @@
 			}
 		} )
 		.catch( function ( error ) {
-			mw.log.warn( 'WikiFame: initialisation failed', error );
+			mw.log.warn( 'WikiPeople: initialisation failed', error );
 		} );
 
 	/* -------------------------------------------------------------- configuration */
@@ -222,7 +222,7 @@
 
 		// The page is per user as well as per wiki, so both belong in the key: a shared
 		// browser must not serve one account's configuration to the next.
-		cacheKey = 'wikifame:config:' + CACHE_VERSION + ':' + config.wgDBname + ':' + page;
+		cacheKey = 'wikipeople:config:' + CACHE_VERSION + ':' + config.wgDBname + ':' + page;
 		cached = readCache( cacheKey, CONFIG_CACHE_MAX_AGE_MS );
 
 		if ( cached ) {
@@ -326,7 +326,7 @@
 			return null;
 		}
 
-		cacheKey = 'wikifame:content:' + CACHE_VERSION + ':' + config.wgDBname + ':' +
+		cacheKey = 'wikipeople:content:' + CACHE_VERSION + ':' + config.wgDBname + ':' +
 			title + ':' + ( config.wgUserLanguage || 'en' );
 		cached = readCache( cacheKey, CONTENT_CACHE_MAX_AGE_MS );
 
@@ -378,7 +378,7 @@
 			mw.loader.using( 'ext.tmh.player' ).catch( function () {} );
 		}
 
-		container.className = 'wikifame-custom';
+		container.className = 'wikipeople-custom';
 		container.append.apply(
 			container,
 			Array.prototype.slice.call( parsed.body.childNodes )
@@ -513,7 +513,7 @@
 
 		box = document.createElement( 'div' );
 		box.id = HISTORY_INTRO_ID;
-		box.className = 'wikifame wikifame--history';
+		box.className = 'wikipeople wikipeople--history';
 		box.setAttribute( 'role', 'note' );
 
 		custom = await loadCustomContent( wikiConfig.historyIntroPage );
@@ -522,21 +522,21 @@
 			box.append( renderCustomContent( custom ) );
 		} else {
 			line = document.createElement( 'p' );
-			line.textContent = mw.message( 'wikifame-history-intro' ).text();
+			line.textContent = mw.message( 'wikipeople-history-intro' ).text();
 			box.append( line );
 
 			// The help and sandbox pages have no cross-wiki names, so this sentence only
 			// appears where the local configuration page supplies both titles.
 			if ( wikiConfig.editHelpPage && wikiConfig.sandboxPage ) {
 				line = document.createElement( 'p' );
-				appendMessageWithNodes( line, 'wikifame-history-help', [
+				appendMessageWithNodes( line, 'wikipeople-history-help', [
 					createWikiLink(
 						wikiConfig.editHelpPage,
-						mw.message( 'wikifame-history-help-label' ).text()
+						mw.message( 'wikipeople-history-help-label' ).text()
 					),
 					createWikiLink(
 						wikiConfig.sandboxPage,
-						mw.message( 'wikifame-history-sandbox-label' ).text()
+						mw.message( 'wikipeople-history-sandbox-label' ).text()
 					)
 				] );
 				box.append( line );
@@ -547,11 +547,11 @@
 		// which article the reader is looking at, so {{FULLPAGENAME}} would name the
 		// introduction itself and the link would offer to edit the wrong page.
 		line = document.createElement( 'p' );
-		appendMessageWithNodes( line, 'wikifame-history-edit', [ createEditLink() ] );
+		appendMessageWithNodes( line, 'wikipeople-history-edit', [ createEditLink() ] );
 		box.append( line );
 
 		insertBelowSubtitle( box );
-		mw.hook( 'wikifame.history' ).fire( box, wikiConfig );
+		mw.hook( 'wikipeople.history' ).fire( box, wikiConfig );
 
 		// After the box is in the page, never before. The introduction is the reason the
 		// reader is looking, and it must not wait on an API round trip to appear.
@@ -568,8 +568,8 @@
 	 * keeps history views free for everyone who does not use this.
 	 */
 	async function fillContributorCount( box ) {
-		var phrases = box.querySelectorAll( '.wikifame-count' );
-		var numbers = box.querySelectorAll( '.wikifame-number' );
+		var phrases = box.querySelectorAll( '.wikipeople-count' );
+		var numbers = box.querySelectorAll( '.wikipeople-number' );
 		var data;
 		var phrase;
 
@@ -583,7 +583,7 @@
 			// them ten seconds after they started reading it.
 			data = await contributionData( [] );
 		} catch ( error ) {
-			mw.log.warn( 'WikiFame: contributor count unavailable', error );
+			mw.log.warn( 'WikiPeople: contributor count unavailable', error );
 			return;
 		}
 
@@ -591,9 +591,9 @@
 			return;
 		}
 
-		phrase = mw.message( 'wikifame-people', formatNumber( data.humanCount ) ).text();
+		phrase = mw.message( 'wikipeople-people', formatNumber( data.humanCount ) ).text();
 		if ( data.limited ) {
-			phrase = mw.message( 'wikifame-at-least', phrase ).text();
+			phrase = mw.message( 'wikipeople-at-least', phrase ).text();
 		}
 
 		phrases.forEach( function ( slot ) {
@@ -638,10 +638,10 @@
 		var box = document.createElement( 'div' );
 
 		box.id = ARTICLE_SUMMARY_ID;
-		box.className = 'wikifame wikifame--article wikifame-pending';
+		box.className = 'wikipeople wikipeople--article wikipeople-pending';
 		box.setAttribute( 'role', 'note' );
 		box.setAttribute( 'aria-busy', 'true' );
-		box.textContent = mw.message( 'wikifame-pending' ).text();
+		box.textContent = mw.message( 'wikipeople-pending' ).text();
 		return box;
 	}
 
@@ -652,9 +652,9 @@
 	 * That is what separates it from showing a number the API would later contradict.
 	 */
 	function settlePendingSummary( box ) {
-		box.textContent = mw.message( 'wikifame-summary-prefix' ).text() +
-			mw.message( 'wikifame-many-people' ).text() + '.';
-		box.classList.remove( 'wikifame-pending' );
+		box.textContent = mw.message( 'wikipeople-summary-prefix' ).text() +
+			mw.message( 'wikipeople-many-people' ).text() + '.';
+		box.classList.remove( 'wikipeople-pending' );
 		box.removeAttribute( 'aria-busy' );
 	}
 
@@ -725,7 +725,7 @@
 			pending = contributionData( PENDING_RETRY_DELAYS_MS ).then( function ( value ) {
 				outcome.data = value;
 			}, function ( error ) {
-				mw.log.warn( 'WikiFame: attribution unavailable', error );
+				mw.log.warn( 'WikiPeople: attribution unavailable', error );
 				outcome.failed = true;
 			} ).then( function () {
 				outcome.done = true;
@@ -758,7 +758,7 @@
 		} else {
 			insertBelowSubtitle( summary );
 		}
-		mw.hook( 'wikifame.summary' ).fire( summary, outcome.data );
+		mw.hook( 'wikipeople.summary' ).fire( summary, outcome.data );
 	}
 
 	/**
@@ -887,26 +887,26 @@
 		}
 
 		box.id = ARTICLE_SUMMARY_ID;
-		box.className = 'wikifame wikifame--article';
+		box.className = 'wikipeople wikipeople--article';
 		box.setAttribute( 'role', 'note' );
 		// Both tooltips describe a ranking, so neither belongs on a box that shows none.
 		// A page WikiWho refused can still reach this branch, and saying its names come
 		// from WikiWho would then credit a service that never saw the article.
 		if ( topEditors.length ) {
 			tooltip.push( mw.message(
-				namedByEditCount ? 'wikifame-tooltip-edits' : 'wikifame-tooltip'
+				namedByEditCount ? 'wikipeople-tooltip-edits' : 'wikipeople-tooltip'
 			).text() );
 		}
 		if ( !Number.isNaN( computedDate.getTime() ) && dateFormatter ) {
 			tooltip.push( mw.message(
-				'wikifame-computed',
+				'wikipeople-computed',
 				dateFormatter.format( computedDate )
 			).text() );
 		}
 		box.title = tooltip.join( ' ' );
 
 		box.append( document.createTextNode( mw.message(
-			namedByEditCount ? 'wikifame-summary-prefix-edits' : 'wikifame-summary-prefix'
+			namedByEditCount ? 'wikipeople-summary-prefix-edits' : 'wikipeople-summary-prefix'
 		).text() ) );
 
 		if ( topEditors.length ) {
@@ -971,13 +971,13 @@
 
 		link.href = title.getUrl();
 		link.textContent = name;
-		link.title = mw.message( 'wikifame-user-title', name ).text();
+		link.title = mw.message( 'wikipeople-user-title', name ).text();
 		if ( Number.isFinite( editor.share ) && percentageFormatter ) {
 			// The share is a share of whatever was ranked: of the visible tokens, or of
 			// the page's edits. Naming the wrong one turns a true percentage into a
 			// false statement.
 			link.title += ' — ' + mw.message(
-				byEditCount ? 'wikifame-share-edits' : 'wikifame-share',
+				byEditCount ? 'wikipeople-share-edits' : 'wikipeople-share',
 				percentageFormatter.format( editor.share )
 			).text();
 		}
@@ -987,17 +987,17 @@
 	function createHistoryCountLink( count, limited, isRemainder ) {
 		var link = document.createElement( 'a' );
 		var label = mw.message(
-			isRemainder ? 'wikifame-others' : 'wikifame-people',
+			isRemainder ? 'wikipeople-others' : 'wikipeople-people',
 			formatNumber( count )
 		).text();
 
 		if ( limited ) {
-			label = mw.message( 'wikifame-at-least', label ).text();
+			label = mw.message( 'wikipeople-at-least', label ).text();
 		}
 
 		link.href = mw.util.getUrl( config.wgPageName, { action: 'history' } );
 		link.textContent = label;
-		link.title = mw.message( 'wikifame-history-title' ).text();
+		link.title = mw.message( 'wikipeople-history-title' ).text();
 		return link;
 	}
 
@@ -1011,14 +1011,14 @@
 	function createEditLink() {
 		var link = document.createElement( 'a' );
 		link.href = mw.util.getUrl( config.wgPageName, { veaction: 'edit' } );
-		link.textContent = mw.message( 'wikifame-history-edit-label' ).text();
+		link.textContent = mw.message( 'wikipeople-history-edit-label' ).text();
 		return link;
 	}
 
 	/* -------------------------------------------------------------------- caching */
 
 	function getCacheKey() {
-		return 'wikifame:' + CACHE_VERSION + ':' +
+		return 'wikipeople:' + CACHE_VERSION + ':' +
 			config.wgDBname + ':' +
 			config.wgArticleId;
 	}

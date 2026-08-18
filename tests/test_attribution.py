@@ -2,13 +2,13 @@ from collections import Counter
 
 import pytest
 
-from wikifame.attribution import (
+from wikipeople.attribution import (
     candidate_user_ids,
     count_tokens,
     select_contributors,
     select_top_editors,
 )
-from wikifame.policy import ResolvedUser, should_highlight_contributor
+from wikipeople.policy import ResolvedUser, should_highlight_contributor
 
 
 def test_count_tokens_ignores_markup_and_malformed_tokens() -> None:

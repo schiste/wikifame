@@ -1,6 +1,6 @@
-# Setting up WikiFame on a wiki
+# Setting up WikiPeople on a wiki
 
-WikiFame is currently a **personal script**: you install it for yourself, on one wiki, and only you
+WikiPeople is currently a **personal script**: you install it for yourself, on one wiki, and only you
 see it. Everything below is something you do in your own user space, with no special rights and
 nobody else's permission.
 
@@ -12,9 +12,9 @@ All three live under your own user name, on whichever wiki you are installing on
 
 | Page | What it is | Required? |
 | --- | --- | --- |
-| `User:YOU/wikifame.js` | The script | Yes |
-| `User:YOU/wikifame.css` | Its styles | Yes |
-| `User:YOU/wikifame-config.json` | Your settings for this wiki | No |
+| `User:YOU/wikipeople.js` | The script | Yes |
+| `User:YOU/wikipeople.css` | Its styles | Yes |
+| `User:YOU/wikipeople-config.json` | Your settings for this wiki | No |
 
 Substitute your wiki's own user-namespace name where it differs — `Utilisateur:` on the French
 Wikipedia, for example. The script resolves that itself, so the three pages always sit together
@@ -23,8 +23,8 @@ whatever the wiki calls the namespace.
 Then load the first two from `User:YOU/common.js`:
 
 ```javascript
-importScript( 'User:YOU/wikifame.js' );
-importStylesheet( 'User:YOU/wikifame.css' );
+importScript( 'User:YOU/wikipeople.js' );
+importStylesheet( 'User:YOU/wikipeople.css' );
 ```
 
 The configuration page is **not** imported. The script looks it up by name on its own.
@@ -46,7 +46,7 @@ or practise in …" sentence in the history box is simply left out.
 
 1. Pick the file for your wiki from [`config/`](../config) in this repository — currently
    [`enwiki.json`](../config/enwiki.json) and [`frwiki.json`](../config/frwiki.json).
-2. Create `User:YOU/wikifame-config.json` on that wiki and paste it in.
+2. Create `User:YOU/wikipeople-config.json` on that wiki and paste it in.
 3. For a wiki with no published default yet, copy either file and replace the two titles with your
    wiki's own, including their namespace, exactly as they appear locally.
 4. Save. MediaWiki treats `.json` subpages as JSON, validates them, and refuses to save invalid
@@ -130,31 +130,31 @@ Available keys, with the built-in English text:
 
 | Key | Default |
 | --- | --- |
-| `wikifame-summary-prefix` | `Article written by ` |
-| `wikifame-summary-prefix-edits` | `Article most edited by ` |
-| `wikifame-people` | `{{PLURAL:$1|$1 person|$1 people}}` |
-| `wikifame-others` | `{{PLURAL:$1|$1 other person|$1 other people}}` |
-| `wikifame-at-least` | `at least $1` |
-| `wikifame-pending` | `Analysing contributions…` |
-| `wikifame-many-people` | `many people` |
-| `wikifame-user-title` | `View the user page of $1` |
-| `wikifame-share` | `$1 of the currently visible tokens` |
-| `wikifame-share-edits` | `$1 of the edits to this page` |
-| `wikifame-history-title` | `View the full page history` |
-| `wikifame-tooltip` | `Main authors of the text according to WikiWho.` |
-| `wikifame-tooltip-edits` | `Accounts that edited this page most, from its history. The text itself could not be analysed.` |
-| `wikifame-computed` | `Data computed on $1.` |
-| `wikifame-history-intro` | `Each line is one version of the article, showing who changed it.` |
-| `wikifame-history-help` | `To get started, read $1 or practise in $2.` |
-| `wikifame-history-help-label` | `the editing help` |
-| `wikifame-history-sandbox-label` | `the sandbox` |
-| `wikifame-history-edit` | `You can also $1.` |
-| `wikifame-history-edit-label` | `edit this article directly` |
+| `wikipeople-summary-prefix` | `Article written by ` |
+| `wikipeople-summary-prefix-edits` | `Article most edited by ` |
+| `wikipeople-people` | `{{PLURAL:$1|$1 person|$1 people}}` |
+| `wikipeople-others` | `{{PLURAL:$1|$1 other person|$1 other people}}` |
+| `wikipeople-at-least` | `at least $1` |
+| `wikipeople-pending` | `Analysing contributions…` |
+| `wikipeople-many-people` | `many people` |
+| `wikipeople-user-title` | `View the user page of $1` |
+| `wikipeople-share` | `$1 of the currently visible tokens` |
+| `wikipeople-share-edits` | `$1 of the edits to this page` |
+| `wikipeople-history-title` | `View the full page history` |
+| `wikipeople-tooltip` | `Main authors of the text according to WikiWho.` |
+| `wikipeople-tooltip-edits` | `Accounts that edited this page most, from its history. The text itself could not be analysed.` |
+| `wikipeople-computed` | `Data computed on $1.` |
+| `wikipeople-history-intro` | `Each line is one version of the article, showing who changed it.` |
+| `wikipeople-history-help` | `To get started, read $1 or practise in $2.` |
+| `wikipeople-history-help-label` | `the editing help` |
+| `wikipeople-history-sandbox-label` | `the sandbox` |
+| `wikipeople-history-edit` | `You can also $1.` |
+| `wikipeople-history-edit-label` | `edit this article directly` |
 
 The three `-edits` keys are used only when the text itself could not be analysed and the names come
 from the page history instead — who edited most, rather than who wrote what you are reading. They
 are worded as a weaker claim on purpose. If you override them, keep them weaker than their
-counterparts: the same names under `wikifame-summary-prefix` would credit people for text they may
+counterparts: the same names under `wikipeople-summary-prefix` would credit people for text they may
 never have written.
 
 If you do override something:
@@ -172,10 +172,10 @@ a screenshot of the history page with callouts, a short Commons video, a templat
 **wikitext page** and point at it:
 
 ```json
-"historyIntroPage": "User:YOU/wikifame-history"
+"historyIntroPage": "User:YOU/wikipeople-history"
 ```
 
-Then create `User:YOU/wikifame-history` and write ordinary wikitext:
+Then create `User:YOU/wikipeople-history` and write ordinary wikitext:
 
 ```wikitext
 [[File:Wikipedia history page annotated.png|thumb|right|300px|Each line is one version.]]
@@ -197,8 +197,8 @@ this script — the wiki does the work, and you preview and revert it like any o
   is looking at. `{{FULLPAGENAME}}` in your wikitext would resolve to the *introduction page*, and
   the link would offer to edit the wrong page. Same for `{{PAGENAME}}` and friends.
 - **One language per page.** The script tries `…/fr-ca`, then `…/fr`, then the bare title, using
-  your interface language. So `User:YOU/wikifame-history/fr` serves French readers and
-  `User:YOU/wikifame-history` catches everyone else. This is the piece `messages` gets wrong, and
+  your interface language. So `User:YOU/wikipeople-history/fr` serves French readers and
+  `User:YOU/wikipeople-history` catches everyone else. This is the piece `messages` gets wrong, and
   the reason to prefer this route for anything longer than a phrase.
 - **Weight is on you.** This box renders on every history view. A large image or an autoplaying
   video would be paid for every time. The script sets images to load lazily and stops video from
@@ -216,15 +216,15 @@ Your page is parsed once and reused for every article, so it cannot contain this
 contributor count. Declare a slot instead, and the script fills it in:
 
 ```wikitext
-Cet article a été écrit par <span class="wikifame-count">des dizaines de personnes</span>.
+Cet article a été écrit par <span class="wikipeople-count">des dizaines de personnes</span>.
 
-<span class="wikifame-number">plusieurs centaines</span> de personnes y ont contribué.
+<span class="wikipeople-number">plusieurs centaines</span> de personnes y ont contribué.
 ```
 
 | Class | Becomes |
 | --- | --- |
-| `wikifame-count` | The full localised phrase — `1 234 personnes`, correctly pluralised, prefixed with `au moins` when the count is a lower bound. |
-| `wikifame-number` | Just the formatted number — `1 234` — for when you write the sentence yourself. |
+| `wikipeople-count` | The full localised phrase — `1 234 personnes`, correctly pluralised, prefixed with `au moins` when the count is a lower bound. |
+| `wikipeople-number` | Just the formatted number — `1 234` — for when you write the sentence yourself. |
 
 Use as many of each as you like; they all get the same value.
 
@@ -246,11 +246,11 @@ Not through the configuration page — a `.json` page that might contain code is
 review by reading it. The script fires two hooks instead:
 
 ```javascript
-mw.hook( 'wikifame.history' ).add( function ( box, wikiConfig ) {
+mw.hook( 'wikipeople.history' ).add( function ( box, wikiConfig ) {
 	// box is the rendered <div>, already in the page.
 } );
 
-mw.hook( 'wikifame.summary' ).add( function ( summary, data ) {
+mw.hook( 'wikipeople.summary' ).add( function ( summary, data ) {
 	// data.contributors, data.distinct_contributors, data.computed_at…
 } );
 ```
@@ -272,19 +272,19 @@ order:
 | The sentence shows but the help sentence does not | `editHelpPage` and `sandboxPage` are not both set, `showHistoryIntro` is `false`, or `historyIntroPage` is set and has replaced it. |
 | Configuration edits have no effect | Stale `sessionStorage`; open a new tab. Or a key is misspelled — unknown keys are ignored silently. |
 | `historyIntroPage` is set but the built-in text still shows | The page does not exist under any of the three titles tried, or its absence is still cached. Create it, then open a new tab. |
-| Custom content renders but looks wrong | It is your wikitext, parsed as usual. Preview the page on its own; what you see there is what the box gets. Oversized media is constrained by `wikifame.css`, not fixed. |
-| The author count stays on its fallback wording | No result for this article yet — open the article itself once, wait, then come back. Also check the class name: `wikifame-count`, on an element, not a template parameter. |
+| Custom content renders but looks wrong | It is your wikitext, parsed as usual. Preview the page on its own; what you see there is what the box gets. Oversized media is constrained by `wikipeople.css`, not fixed. |
+| The author count stays on its fallback wording | No result for this article yet — open the article itself once, wait, then come back. Also check the class name: `wikipeople-count`, on an element, not a template parameter. |
 
 The attribution sentence appears on normal article views only: not on diffs, not on old revisions,
 not outside the main namespace.
 
 For a deeper look, open the browser console. Initialisation failures are logged through
-`mw.log.warn` with a `WikiFame:` prefix.
+`mw.log.warn` with a `WikiPeople:` prefix.
 
 ## Later: becoming a site-wide gadget
 
-Once a community adopts WikiFame for all its readers, the configuration stops being personal and
-moves to `MediaWiki:Wikifame-config.json` on that wiki — same fields, same file, one copy shared by
+Once a community adopts WikiPeople for all its readers, the configuration stops being personal and
+moves to `MediaWiki:Wikipeople-config.json` on that wiki — same fields, same file, one copy shared by
 everyone, editable by interface administrators. The files in [`config/`](../config) become the
 starting point for that page instead of for a personal one.
 

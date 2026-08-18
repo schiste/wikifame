@@ -1,4 +1,4 @@
-"""Materialise what each wiki has decided about the accounts WikiFame names.
+"""Materialise what each wiki has decided about the accounts WikiPeople names.
 
 A credit line saying an article was written by someone the community has since banned
 is the tool speaking for the wiki and getting it wrong. The fix cannot live where the
@@ -22,12 +22,12 @@ import argparse
 import logging
 from datetime import timedelta
 
-from wikifame.clients import MediaWikiClient
-from wikifame.errors import WikiFameError
-from wikifame.models import utcnow
-from wikifame.policy import AccountStanding
-from wikifame.repository import StandingRecord
-from wikifame.runtime import Runtime, build_runtime
+from wikipeople.clients import MediaWikiClient
+from wikipeople.errors import WikiPeopleError
+from wikipeople.models import utcnow
+from wikipeople.policy import AccountStanding
+from wikipeople.repository import StandingRecord
+from wikipeople.runtime import Runtime, build_runtime
 
 LOGGER = logging.getLogger(__name__)
 
@@ -86,7 +86,7 @@ def sync_wiki(
                 lock_reason = mediawiki.global_lock_reason(block.username) if locked else None
                 lock_checked_at = now
                 locks_checked += 1
-            except WikiFameError as error:
+            except WikiPeopleError as error:
                 # One account's lock check failing must not cost the whole run its block
                 # pass. Leaving lock_checked_at alone puts it back at the front of the
                 # queue next time.
@@ -145,7 +145,7 @@ def resolve_target_wikis(runtime: Runtime, explicit: str | None) -> list[str]:
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Refresh block and lock status for the accounts WikiFame names"
+        description="Refresh block and lock status for the accounts WikiPeople names"
     )
     parser.add_argument("--wiki", default=None, help="Sync one wiki instead of every active one")
     parser.add_argument(
@@ -176,7 +176,7 @@ def main() -> None:
         for wiki in wikis:
             try:
                 tracked += sync_wiki(runtime, mediawiki, wiki, args.dry_run)[0]
-            except WikiFameError as error:
+            except WikiPeopleError as error:
                 # One unreachable wiki keeps its previous standings rather than losing them.
                 LOGGER.warning("%s: standing sync skipped, table unchanged (%s)", wiki, error)
         LOGGER.info("%s accounts tracked across %s wikis", tracked, len(wikis))

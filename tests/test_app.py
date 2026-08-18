@@ -4,10 +4,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from wikifame.app import create_app
-from wikifame.config import Settings
-from wikifame.models import utcnow
-from wikifame.runtime import build_runtime
+from wikipeople.app import create_app
+from wikipeople.config import Settings
+from wikipeople.models import utcnow
+from wikipeople.runtime import build_runtime
 
 
 def test_cache_miss_then_revalidatable_ready_response(tmp_path: Path) -> None:

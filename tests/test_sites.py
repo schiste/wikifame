@@ -1,7 +1,7 @@
 import pytest
 
-from wikifame.errors import PermanentDataError
-from wikifame.sites import ALL_WIKIS, SiteResolver
+from wikipeople.errors import PermanentDataError
+from wikipeople.sites import ALL_WIKIS, SiteResolver
 
 RESOLVER = SiteResolver()
 

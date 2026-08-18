@@ -20,7 +20,7 @@ before the deploy:
 - **HTTP.** `/v2` sent `Cache-Control: public, max-age=86400` with no `ETag` and no
   `Last-Modified`. With no validator a browser cannot cheaply ask "is this still current?", so it
   simply waits out the day. `/v1` was worse: `max-age=31536000, immutable`.
-- **The gadget's `sessionStorage`.** Keyed `wikifame:<CACHE_VERSION>:<wiki>:<page id>` and held
+- **The gadget's `sessionStorage`.** Keyed `wikipeople:<CACHE_VERSION>:<wiki>:<page id>` and held
   for 24 hours. `CACHE_VERSION` versions the payload *shape*, not the server's answer.
 
 Both caches were reasoned about as if the attribution of a revision were a fact about that
