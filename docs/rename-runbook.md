@@ -43,33 +43,49 @@ then minutes, not days.
 - **Never commit credentials.** The database name and the environment variable *values* are
   deployment state. This file records variable names only.
 
-## Phase 1 — Stand the new tool up, writing nothing
+## Phase 1 — Stand the new tool up, unused
 
 1. **Maintainer:** create the `wikipeople` tool in
    [toolsadmin](https://toolsadmin.wikimedia.org/), then log out of SSH and back in. Tool
    creation cannot be automated from here.
-2. Clone the repository under the new tool and deploy the web service only:
+
+   The tool's ToolsDB account is granted by a periodic job, not by tool creation. Until it
+   runs, `mysql -h tools.db.svc.wikimedia.cloud` answers `ERROR 1045 Access denied` with
+   perfectly correct credentials. Wait rather than debug it; it took about half an hour.
+2. Build the image and start the web service:
 
    ```bash
    toolforge build start https://github.com/schiste/wikifame
-   toolforge webservice buildservice start
+   toolforge webservice buildservice start --mount=none
    ```
 
 3. Create the database, as in the first-deployment procedure in
-   [operations.md](operations.md): `CREATE DATABASE ${TOOL_TOOLSDB_USER}__wikipeople`.
-4. **Maintainer:** set the environment variables. There are 36. Four carry new *values*, not
-   just new names:
+   [operations.md](operations.md): `CREATE DATABASE ${TOOL_TOOLSDB_USER}__wikipeople`
+   (`CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci`). The application creates the six
+   tables itself on first start.
+4. Copy the configuration. `.env.example` documents around forty variables, but the old tool
+   only ever *set* four beyond the `TOOL_REPLICA_*` and `TOOL_TOOLSDB_*` pairs that Toolforge
+   injects on its own; everything else runs on its default.
 
-   | Variable | Why it changes |
+   | Variable | Carried across |
    | --- | --- |
-   | `TOOL_TOOLSDB_USER`, `TOOL_TOOLSDB_PASSWORD` | injected by Toolforge for the new tool |
-   | `TOOLSDB_DATABASE` | the new database |
-   | `WIKIFAME_USER_AGENT` → `WIKIPEOPLE_USER_AGENT` | same contact, new name |
-   | `OPTOUT_PAGE`, `METHODOLOGY_URL` | new on-wiki titles |
+   | `BACKFILL_WIKIS`, `PREWARM_WIKIS` | verbatim |
+   | `OPTOUT_PAGE` | same shape, new name — a user subpage, not the `Project:` page in `.env.example` |
+   | `WIKIFAME_USER_AGENT` → `WIKIPEOPLE_USER_AGENT` | product name only; **the contact address must not move** |
 
-5. **Create no jobs.** Web service only, empty database. Nothing writes.
+   Copy them tool to tool on the bastion rather than retyping, so the contact address cannot
+   drift by a keystroke, and diff the result against the source with only the product name
+   substituted. `TOOLSDB_DATABASE` is not needed: the default is `${TOOL_TOOLSDB_USER}__wikipeople`,
+   which is already right. Neither is `METHODOLOGY_URL`, which defaults to the repository.
+5. **Create no jobs.**
 
-**Gate:** `https://wikipeople.toolforge.org/v1/stats` answers. Readers have seen nothing.
+**Gate:** `https://wikipeople.toolforge.org/healthz` and `/v1/stats` answer, `/v1/stats`
+reports `attribution-ladder-v3` and an empty cache, and all six tables exist with zero rows.
+
+**Do not request a page from the new tool.** "Nothing writes" is true of the jobs, not of the
+web service: a cache miss enqueues durable work and registers the wiki as active, so one
+curiosity request leaves rows behind and the phase-3 migration then refuses the target as
+non-empty. The two gate endpoints are read-only. Nobody else knows the URL yet.
 
 ## Phase 2 — Rename inside the repository
 
