@@ -113,7 +113,10 @@ The sanctioned-contributor release adds the `contributor_standing` table, which
 - `MAX_VISIBLE_BLOCK_SECONDS` (default `7776000`, ninety days) — the longest block an account may
   carry and still be named. Indefinite blocks exceed every threshold, as do global locks whose
   steward reason reads as a sanction; a lock recorded as deceased, vanished or compromised does
-  not withhold a name, and neither does one whose reason cannot be read. Equal by
+  not withhold a name, and neither does one whose reason cannot be read. A block whose own
+  reason reads as a courtesy — blocked at their own request, or because the account was
+  compromised — does not withhold a name either, whatever its duration. The two tests take
+  opposite defaults on purpose, and ADR-0009 says why. Equal by
   coincidence to `PAGE_FRESHNESS_SECONDS` and unrelated to it: one is about when an answer goes
   stale, the other about what a community has decided about a person. Do not tie them;
 - `MAX_VISIBLE_BLOCK_SECONDS_BY_WIKI` (default empty) — per-wiki overrides as
@@ -131,6 +134,13 @@ The sanctioned-contributor release adds the `contributor_standing` table, which
 Expect roughly an hour between a block being imposed and the name disappearing, and up to a day
 for a global lock alone. The opt-out list stays the fast path when something must go now. See
 [ADR-0009](decisions/0009-sanctioned-contributor-visibility.md) for the rule and its edge cases.
+
+Both reasons are stored, in `block_reason` and `lock_reason`, because neither flag says what the
+sanction means. **On a database that predates them, `create_all()` will not add the columns** —
+it only creates missing tables. Run `ALTER TABLE contributor_standing ADD COLUMN block_reason
+VARCHAR(255) NULL` and the same for `lock_reason` before deploying, or every read of the table
+fails. If a courtesy wording is found being read as a sanction, the fix is to extend the patterns
+in `policy.py` and deploy; nothing is recomputed and no row needs editing.
 
 The universal-wiki release adds the `active_wikis` table, which `create_all()` creates on first
 start; no migration is required either. Its environment controls are:

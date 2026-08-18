@@ -174,6 +174,68 @@ def test_a_lock_imposed_as_a_courtesy_leaves_the_name(reason: str) -> None:
     assert is_nameable_account(account, 0, NOW) is True
 
 
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "Bloqué à sa demande (blocked at own request)",
+        "Blocage à la demande du contributeur",
+        "À sa demande, cf. ma Pdd",
+        "à sa demande hier sur [[WP:RA]]",
+        "requested on my talk page, user has retired; no prejudice against unblocking",
+        "Compromised account",
+        "Compte compromis - l'utilisateur indique avoir perdu son mot de passe",
+        "[[WP:Vandalism|Vandalism]]: compromised?",
+        "[[WP:RTV|RTV]] enforcement",
+        "по просьбе участника",
+    ],
+)
+def test_a_block_imposed_as_a_courtesy_leaves_the_name(reason: str) -> None:
+    """The block-side mirror of the memorial lock, and the same mistake.
+
+    Every string here is a real block reason carried by an account WikiFame names.
+    Someone blocked at their own request asked to be stopped from editing, which is the
+    opposite of a wiki withdrawing its trust; someone whose password was stolen did
+    nothing at all. Neither has forfeited the credit for what they wrote.
+    """
+    account = standing(blocked_at=NOW - DAY, block_reason=reason)
+    assert is_nameable_account(account, NINETY_DAYS, NOW) is True
+    assert is_nameable_account(account, 0, NOW) is True
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "[[WP:Sockpuppetry|Abusing multiple accounts]]",
+        "Long-term abuse",
+        "contributeur multi-problématique : [[Wikipédia:Bulletin des administrateurs]]",
+        "Vandalism-only account",
+        "determined to not be compromised. restore TPA per request",
+        "",
+    ],
+)
+def test_a_block_imposed_as_a_sanction_still_withholds_the_name(reason: str) -> None:
+    """A block withholds unless its reason proves otherwise, which is the opposite
+    default to the lock rule and matches how the two mechanisms are actually used: of
+    the accounts withheld on the first live run, 536 of 556 were sanctions.
+
+    The fifth string is why the negation guard exists. Reading "not compromised" as a
+    compromise would name someone their wiki deliberately blocked.
+    """
+    account = standing(blocked_at=NOW - 400 * DAY, block_reason=reason)
+    assert is_nameable_account(account, NINETY_DAYS, NOW) is False
+
+
+def test_a_courtesy_block_does_not_override_a_sanctioning_lock() -> None:
+    """The lock is the movement speaking; one wiki's kindness does not answer it."""
+    account = standing(
+        blocked_at=NOW - DAY,
+        block_reason="Bloqué à sa demande",
+        globally_locked=True,
+        lock_reason="Long-term abuse",
+    )
+    assert is_nameable_account(account, NINETY_DAYS, NOW) is False
+
+
 def test_a_lock_whose_reason_is_unknown_leaves_the_name() -> None:
     """Absence of data is not a finding, here as everywhere else in this module.
 

@@ -42,9 +42,9 @@ An account is not named when either:
 - it is **globally locked for a reason that reads as a sanction**, whatever the local
   threshold, because such a lock has no expiry to
   measure and is not a local decision; or
-- it carries a **non-partial local block** whose duration exceeds
-  `MAX_VISIBLE_BLOCK_SECONDS` — ninety days by default — where an indefinite block counts
-  as exceeding any threshold.
+- it carries a **non-partial local block that is not a courtesy** and whose duration
+  exceeds `MAX_VISIBLE_BLOCK_SECONDS` — ninety days by default — where an indefinite block
+  counts as exceeding any threshold.
 
 Everything else is named. In particular:
 
@@ -56,6 +56,9 @@ Everything else is named. In particular:
 | Indefinite block | no | no end date is not a short block |
 | Partial block | yes | a block scoped to a page is a remedy, not a ban |
 | Block that has since expired | yes | the row outlived the sanction |
+| Blocked at their own request | yes | asking to be stopped is not being excluded |
+| Blocked because the account was compromised | yes | the person did nothing at all |
+| Blocked for an unrecognised reason | no | on this side, the usual case is a sanction |
 | Locked for abuse, spam, ban evasion | no | the strongest exclusion there is |
 | Locked as deceased, vanished, compromised | yes | the same mechanism, the opposite meaning |
 | Locked for an unrecognised reason | yes | absence of data is not a finding |
@@ -90,6 +93,35 @@ population it erases first is the one least able to object.
 The reason costs one extra request, made only for accounts already found locked — well
 under one percent of those tracked — and asked of Meta rather than of the wiki being
 served, because only Meta holds that log.
+
+#### A block does not mean one thing either
+
+Auditing the same run against the block side found the identical defect in a milder form.
+Of the 556 accounts whose names it withheld, nineteen were not sanctioned at all: thirteen
+had asked an administrator to block them so they would stop editing, five had reported
+their password stolen, and one had exercised the right to vanish. A block is one mechanism
+serving opposite purposes too — "Bloqué à sa demande", "Compromised account" — and someone
+who asked to be stopped from editing has done the opposite of losing the wiki's trust.
+
+The block reason is free on the call already being made: `blockreason` is another field on
+the same `list=users` response, fifty accounts at a time.
+
+**The two rules take opposite defaults, deliberately.** A lock withholds a name only on
+proof of sanction; a block withholds unless there is proof of courtesy. That asymmetry is
+not a hedge, it is what the measured population says: most locks are courtesies, while 536
+of those 556 blocks were for something nobody would call a kindness. Requiring proof in the
+direction the data actually runs keeps both errors small. Defaulting the block side towards
+naming instead would have restored nineteen names at the price of five hundred.
+
+The residual cost is a courtesy phrased in a way the tool does not recognise, which stays
+withheld. That is why the wording list is meant to be extended when one is found rather
+than treated as complete. One negation is carried alongside it, because "determined to not
+be compromised" is a real block reason and the naive test reads a denial as the thing it
+denies.
+
+Nothing collapses the two facts into one. A courtesy block does not rescue an account that
+a steward has locked for abuse, and a sanction lock is checked first for exactly that
+reason.
 
 ## Where the rule runs
 
@@ -138,10 +170,15 @@ response, so it exists in exactly one place and cannot drift.
 - **Up to a day of delay for a lock**, because of the rationing. The same reasoning
   applies, and a locked account is nearly always locally blocked too, so the block pass
   usually catches it first.
-- **Wrongly withheld names.** A long block for something procedural — a compromised
-  account, a username violation — reads to this rule as exclusion. The per-wiki threshold
-  is the remedy; there is no per-account exception, and adding one would mean maintaining
-  a list of people the tool has decided to keep naming, which is worse than the problem.
+- **Wrongly withheld names.** A long block for something procedural — a username
+  violation, or a courtesy worded in a way the tool does not recognise — reads to this
+  rule as exclusion. The remedies are the per-wiki threshold and the wording list; there
+  is no per-account exception, and adding one would mean maintaining a list of people the
+  tool has decided to keep naming, which is worse than the problem.
+- **A person can be both.** An account locked as deceased and separately blocked locally
+  as a sanction stays withheld, because the local block is a decision the wiki made and
+  did not withdraw. Whether a ban should outlive the person is not a question this tool
+  gets to answer on the wiki's behalf.
 - **An expired block leaves no trace**, so the rule only ever sees currently-active
   sanctions. Someone blocked for two years in 2019 is named today. That is intended: the
   question is whether the wiki excludes this person now.

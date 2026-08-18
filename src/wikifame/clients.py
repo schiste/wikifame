@@ -274,7 +274,8 @@ class MediaWikiClient:
         """Return each account's local block state, fifty accounts per request.
 
         `blockinfo` rides along on the same `list=users` call that already answers about
-        groups, so knowing whether an account is blocked costs no extra request. Only
+        groups, so knowing whether an account is blocked — and why — costs no extra
+        request. Only
         active blocks appear: MediaWiki keeps no trace of one that has expired, which is
         why the caller replaces the whole set rather than merging into it.
 
@@ -308,6 +309,9 @@ class MediaWikiClient:
                         None if expiry.lower() in INDEFINITE_EXPIRIES else _parse_timestamp(expiry)
                     ),
                     block_partial=bool(item.get("blockpartial")),
+                    # Rides along on this same call, so knowing why an account was
+                    # blocked is as free as knowing that it was.
+                    block_reason=(str(item.get("blockreason") or "").strip() or None),
                 )
         return standings
 

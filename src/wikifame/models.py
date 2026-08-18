@@ -160,6 +160,11 @@ class ContributorStanding(Base):
     global lock costs one request per account, so locks are refreshed on a rotation and
     each row remembers when its turn last came.
 
+    `block_reason` and `lock_reason` are stored because neither flag says what the
+    sanction means. Both mechanisms serve opposite purposes — a block can be a ban or a
+    kindness, a lock can be a ban or a memorial — and only the administrator's wording
+    tells them apart. `is_courtesy_block` and `is_sanction_lock` are what read them.
+
     `lock_reason` is stored because the flag alone does not say what the lock means.
     Stewards use one mechanism for opposite purposes, and a memorial lock must not read
     as a ban; `is_sanction_lock` is what tells them apart, and it needs the text.
@@ -174,6 +179,7 @@ class ContributorStanding(Base):
     blocked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     block_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     block_partial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    block_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     globally_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     lock_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     lock_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

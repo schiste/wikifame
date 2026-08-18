@@ -216,8 +216,11 @@ The same reasoning covers a different question: whether to name an account the w
 excluded. A credit under an article title speaks in the project's voice, and it should not
 contradict the project — but a block is also an ordinary editorial event, so the line is drawn by
 duration. `standing-sync` records each named account's local block and CentralAuth lock status in
-`contributor_standing`, and the API drops accounts locked globally as a sanction, or under a non-partial
-block longer than `MAX_VISIBLE_BLOCK_SECONDS`, ninety days by default. The rule is applied when the
+`contributor_standing`, and the API drops accounts locked globally as a sanction, or under a
+non-partial block longer than `MAX_VISIBLE_BLOCK_SECONDS`, ninety days by default. Both the lock
+and the block are read together with their reasons, because each mechanism serves opposite
+purposes — stewards lock the deceased as well as abusers, and administrators block people at
+their own request — and a flag alone cannot tell a memorial from a ban. The rule is applied when the
 response is built rather than when the result is computed, because a sanction changes without
 anyone touching the article: baked into a stored row it would stay wrong for as long as that row
 stays fresh. `distinct_contributors` is unchanged and the dropped share moves into

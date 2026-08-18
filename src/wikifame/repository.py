@@ -415,6 +415,7 @@ class Repository:
                 blocked_at=row.blocked_at,
                 block_expires_at=row.block_expires_at,
                 block_partial=row.block_partial,
+                block_reason=row.block_reason,
                 globally_locked=row.globally_locked,
                 lock_reason=row.lock_reason,
             )
@@ -440,6 +441,7 @@ class Repository:
                     blocked_at=row.blocked_at,
                     block_expires_at=row.block_expires_at,
                     block_partial=row.block_partial,
+                    block_reason=row.block_reason,
                     globally_locked=row.globally_locked,
                     lock_reason=row.lock_reason,
                 ),
@@ -531,6 +533,7 @@ class Repository:
                 row.blocked_at = standing.blocked_at
                 row.block_expires_at = standing.block_expires_at
                 row.block_partial = standing.block_partial
+                row.block_reason = standing.block_reason
                 row.globally_locked = standing.globally_locked
                 row.lock_reason = standing.lock_reason
                 row.lock_checked_at = record.lock_checked_at

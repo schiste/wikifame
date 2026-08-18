@@ -10,6 +10,28 @@ BOT_NAME_PATTERN = re.compile(r"bot$", re.IGNORECASE)
 # Stewards write lock reasons as free text, but the sanctioning ones are formulaic:
 # "long-term abuse", "spam-only account", "lock evasion", "cross-wiki abuse",
 # "globally or WMF banned user". None of the courtesy reasons share this vocabulary.
+# A local block is imposed by one wiki on one account, and like a global lock the same
+# mechanism serves opposite purposes: administrators block abusers, and they block the
+# accounts of people who asked to be stopped from editing, whose password was stolen, or
+# who have died. These are the wordings those blocks actually carry on the wikis served.
+# The list is expected to grow — a courtesy phrased in a way it does not know stays
+# withheld, so anything found missing belongs here.
+BLOCK_COURTESY_PATTERN = re.compile(
+    r"à sa demande|a sa demande|à la demande d|sa propre demande|own request|self-?request"
+    r"|at their request|at his request|at her request|has retired|par sa demande"
+    r"|compte compromis|compromised|compromis|hacked|piratag|piraté|mot de passe"
+    r"|по (?:собственной )?(?:просьбе|запросу)|взлом|скомпрометирован"
+    r"|right to vanish|\bRTV\b|vanish|deceas|décéd|decede|умер|скончал",
+    re.IGNORECASE,
+)
+
+# "determined to not be compromised" is a real enwiki block reason. Without this the
+# courtesy test would read the denial as the thing it denies.
+BLOCK_COURTESY_NEGATION = re.compile(
+    r"not (?:be )?compromised|non compromis|pas compromis|no evidence of compromise",
+    re.IGNORECASE,
+)
+
 LOCK_SANCTION_PATTERN = re.compile(
     r"abuse|abusiv|\bspam|\blta\b|lock evasion|block evasion|\bbanned\b|\bban\b"
     r"|sock|vandal|harass|phishing|troll|\bufa\b|unauthori[sz]ed bot",
@@ -111,6 +133,7 @@ class AccountStanding:
     blocked_at: datetime | None = None
     block_expires_at: datetime | None = None
     block_partial: bool = False
+    block_reason: str | None = None
     globally_locked: bool = False
     lock_reason: str | None = None
 
@@ -136,6 +159,32 @@ def is_sanction_lock(standing: AccountStanding) -> bool:
     if not standing.lock_reason:
         return False
     return LOCK_SANCTION_PATTERN.search(standing.lock_reason) is not None
+
+
+def is_courtesy_block(standing: AccountStanding) -> bool:
+    """Return whether a local block was a courtesy to the account rather than a sanction.
+
+    The mirror of `is_sanction_lock`, and it fails the other way round, deliberately. A
+    lock is usually a courtesy, so a lock withholds a name only on proof that it is not.
+    A block is usually a sanction — of the accounts withheld on the first live run, 536
+    of 556 were blocked for something nobody would call a kindness — so a block withholds
+    a name unless the reason proves otherwise.
+
+    Requiring proof in the direction the data actually runs keeps both errors small. The
+    residual cost is a courtesy worded in a way this does not recognise, which stays
+    withheld; that is why the pattern above is meant to be extended rather than admired.
+
+    Someone blocked at their own request has not been sanctioned: they asked to be
+    stopped from editing, which is the opposite of a wiki withdrawing its trust. Someone
+    whose account was compromised did nothing at all. Neither has forfeited the credit
+    for what they wrote.
+    """
+    reason = standing.block_reason
+    if not reason:
+        return False
+    if BLOCK_COURTESY_NEGATION.search(reason):
+        return False
+    return BLOCK_COURTESY_PATTERN.search(reason) is not None
 
 
 def is_nameable_account(
@@ -171,6 +220,10 @@ def is_nameable_account(
     if standing.block_partial:
         # A block scoped to a page or a namespace is a targeted editorial remedy, not a
         # ban. Someone barred from one article may be a respected contributor elsewhere.
+        return True
+    if is_courtesy_block(standing):
+        # Blocked at their own request, or because the account was compromised. The
+        # wiki acted for this person, not against them.
         return True
     if standing.block_expires_at is None:
         return False
