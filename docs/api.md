@@ -54,6 +54,14 @@ calculation remain usable across ordinary edits for `PAGE_FRESHNESS_SECONDS`, 90
   the sentence becomes "written by 47 people" rather than disappearing. Clients must not treat it
   as an error or fall back to another source of names. See
   [ADR-0008](decisions/0008-article-opt-out.md).
+- `contributors` may be shorter than the ranking that produced it. An account the wiki has
+  lastingly excluded — globally locked, or under a non-partial block longer than the wiki's
+  threshold, ninety days by default — is dropped when the response is built. There is no flag for
+  it, deliberately: a machine-readable "one of this article's main authors is banned" would be a
+  worse disclosure than the credit it replaces. `distinct_contributors` is unchanged and the
+  missing share appears in `other_contributors`, so a two-name answer with a large remainder is
+  normal and is not an error. See
+  [ADR-0009](decisions/0009-sanctioned-contributor-visibility.md).
 - `source_revision_id` is the exact revision analyzed by WikiWho.
 - `requested_revision_id` is the revision displayed when the request was made.
 - `is_fresh` is true until `computed_at + PAGE_FRESHNESS_SECONDS`.
@@ -209,7 +217,9 @@ produced at least one real result, or once an operator lists it in `PREWARM_WIKI
 - `GET /healthz`: database connectivity probe; returns `{"status":"ok"}`.
 - `GET /v1/stats`: aggregate ready and queue counts, plus `supported_wikis` (the configured
   enablement, `["*"]` by default), `active_wikis` (wikis that have produced a result and are
-  therefore prewarmed), and `opted_out` (articles covered by each wiki's opt-out list). Do not scrape at high frequency because an exact result count can become
+  therefore prewarmed), and `opted_out` (articles covered by each wiki's opt-out list), and `standing`
+  (per wiki, how many named accounts are tracked and how many carry a block or a lock — not how
+  many names are withheld, which depends on a threshold applied per response). Do not scrape at high frequency because an exact result count can become
   expensive on a large InnoDB table.
 - `GET /docs`: generated OpenAPI interface. This documents HTTP structure, while this file
   documents behavioral guarantees.

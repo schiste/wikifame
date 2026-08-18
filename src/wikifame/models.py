@@ -140,3 +140,36 @@ class PageOptOut(Base):
     title: Mapped[str] = mapped_column(String(512), nullable=False)
     source: Mapped[str] = mapped_column(String(512), nullable=False)
     synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)
+
+
+class ContributorStanding(Base):
+    """What each named account's wiki has decided about it, materialised for the serve path.
+
+    Only accounts WikiFame actually names are tracked. That is a few thousand rows rather
+    than the wiki's whole block log, because the top three contributors of popular
+    articles are the same prolific editors over and over.
+
+    A row is a fact with a timestamp, not a verdict: the threshold that turns a block
+    into a withheld name is applied when the response is built (`is_nameable_account`),
+    so an operator can move it, or switch the rule off, without this table changing and
+    without a single result being recomputed. ADR-0009 explains why the verdict may not
+    be stored here and may not be baked into `attribution_results`.
+
+    `lock_checked_at` is separate from `synced_at` because the two facts cost very
+    different amounts to obtain. Block status arrives fifty accounts per request; a
+    global lock costs one request per account, so locks are refreshed on a rotation and
+    each row remembers when its turn last came.
+    """
+
+    __tablename__ = "contributor_standing"
+    __table_args__ = (Index("ix_standing_lock_age", "wiki", "lock_checked_at"),)
+
+    wiki: Mapped[str] = mapped_column(String(64), primary_key=True)
+    user_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    username: Mapped[str] = mapped_column(String(255), nullable=False)
+    blocked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    block_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    block_partial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    globally_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    lock_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)

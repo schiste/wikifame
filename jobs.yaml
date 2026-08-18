@@ -32,3 +32,10 @@
   schedule: "*/15 * * * *"
   timeout: 900
   emails: onfailure
+
+- name: standing-sync
+  image: tool-wikifame/tool-wikifame:latest
+  command: standing
+  schedule: "17 * * * *"
+  timeout: 1800
+  emails: onfailure

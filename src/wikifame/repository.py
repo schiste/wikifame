@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from dataclasses import dataclass
-from datetime import timedelta
+from datetime import datetime, timedelta
 from typing import Any
 
-from sqlalchemy import and_, delete, func, or_, select, update
+from sqlalchemy import and_, case, delete, func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 
@@ -14,10 +14,12 @@ from wikifame.models import (
     ActiveWiki,
     AppState,
     AttributionResult,
+    ContributorStanding,
     PageOptOut,
     WorkItem,
     utcnow,
 )
+from wikifame.policy import AccountStanding
 
 
 @dataclass(frozen=True)
@@ -27,6 +29,19 @@ class OptOutEntry:
     page_id: int
     title: str
     source: str
+
+
+@dataclass(frozen=True)
+class StandingRecord:
+    """One account's standing, plus when its global lock was last confirmed.
+
+    The timestamp is bookkeeping for the refresh rotation rather than part of the fact,
+    so it travels beside `AccountStanding` instead of inside it — nothing on the serve
+    path has any use for it.
+    """
+
+    standing: AccountStanding
+    lock_checked_at: datetime | None
 
 
 @dataclass(frozen=True)
@@ -376,6 +391,173 @@ class Repository:
                     row.source = entry.source
                     row.synced_at = now
         return added, len(removed)
+
+    def standing_for(self, wiki: str, user_ids: Sequence[int]) -> dict[int, AccountStanding]:
+        """Return what is known about these accounts. On the serve path, so it stays one query.
+
+        Called with at most three IDs — the accounts a ready response would name — and
+        skipped entirely when there are none. An ID missing from the answer means nobody
+        has looked at that account yet, which `is_nameable_account` treats as nameable.
+        """
+        if not user_ids:
+            return {}
+        with self.database.session() as session:
+            rows = session.scalars(
+                select(ContributorStanding).where(
+                    ContributorStanding.wiki == wiki,
+                    ContributorStanding.user_id.in_(tuple(user_ids)),
+                )
+            ).all()
+        return {
+            row.user_id: AccountStanding(
+                user_id=row.user_id,
+                username=row.username,
+                blocked_at=row.blocked_at,
+                block_expires_at=row.block_expires_at,
+                block_partial=row.block_partial,
+                globally_locked=row.globally_locked,
+            )
+            for row in rows
+        }
+
+    def standing_records(self, wiki: str) -> dict[int, StandingRecord]:
+        """Everything stored about one wiki's tracked accounts, for the sync job.
+
+        Separate from `standing_for` because the two callers want different things. The
+        serve path wants three accounts and no bookkeeping; the job wants the whole wiki
+        including `lock_checked_at`, which is how it knows whose turn it is.
+        """
+        with self.database.session() as session:
+            rows = session.scalars(
+                select(ContributorStanding).where(ContributorStanding.wiki == wiki)
+            ).all()
+        return {
+            row.user_id: StandingRecord(
+                standing=AccountStanding(
+                    user_id=row.user_id,
+                    username=row.username,
+                    blocked_at=row.blocked_at,
+                    block_expires_at=row.block_expires_at,
+                    block_partial=row.block_partial,
+                    globally_locked=row.globally_locked,
+                ),
+                lock_checked_at=row.lock_checked_at,
+            )
+            for row in rows
+        }
+
+    def lock_check_candidates(self, wiki: str, cutoff: datetime, limit: int) -> list[int]:
+        """User IDs whose global lock status is stale or was never read, oldest first.
+
+        Never-checked accounts sort first. That matters more than it looks: an account
+        WikiFame has only just started naming is the one whose status nobody here has
+        ever confirmed, so it goes ahead of one that was confirmed yesterday.
+        """
+        with self.database.session() as session:
+            return list(
+                session.scalars(
+                    select(ContributorStanding.user_id)
+                    .where(
+                        ContributorStanding.wiki == wiki,
+                        or_(
+                            ContributorStanding.lock_checked_at.is_(None),
+                            ContributorStanding.lock_checked_at < cutoff,
+                        ),
+                    )
+                    .order_by(
+                        ContributorStanding.lock_checked_at.is_(None).desc(),
+                        ContributorStanding.lock_checked_at.asc(),
+                    )
+                    .limit(limit)
+                ).all()
+            )
+
+    def named_contributor_ids(self, wiki: str) -> list[int]:
+        """Every account this wiki's stored results would name, deduplicated.
+
+        Read in Python rather than with a JSON query because the two supported engines
+        spell that differently, and this runs in a job, once an hour, over one column.
+        The set is small — a few thousand accounts for tens of thousands of articles,
+        because the top contributors of popular pages are the same people repeatedly.
+        """
+        seen: set[int] = set()
+        with self.database.session() as session:
+            rows = session.scalars(
+                select(AttributionResult.contributors).where(AttributionResult.wiki == wiki)
+            )
+            for contributors in rows:
+                for contributor in contributors or ():
+                    user_id = contributor.get("user_id")
+                    if isinstance(user_id, int) and user_id > 0:
+                        seen.add(user_id)
+        return sorted(seen)
+
+    def replace_standing(self, wiki: str, records: Sequence[StandingRecord]) -> tuple[int, int]:
+        """Make one wiki's tracked accounts match `records` exactly. Returns (added, removed).
+
+        A full replacement, because MediaWiki reports only active blocks: an account
+        whose block lapsed comes back with nothing said about it, and merging would keep
+        the stale row for ever. Removal also covers an account no stored result names any
+        more, so the table tracks what is displayed rather than growing without bound.
+        """
+        now = utcnow()
+        wanted = {record.standing.user_id: record for record in records}
+        with self.database.session() as session, session.begin():
+            existing = {
+                row.user_id: row
+                for row in session.scalars(
+                    select(ContributorStanding).where(ContributorStanding.wiki == wiki)
+                )
+            }
+            removed = sorted(set(existing) - set(wanted))
+            if removed:
+                session.execute(
+                    delete(ContributorStanding).where(
+                        ContributorStanding.wiki == wiki,
+                        ContributorStanding.user_id.in_(removed),
+                    )
+                )
+            added = 0
+            for user_id, record in wanted.items():
+                row = existing.get(user_id)
+                if row is None:
+                    row = ContributorStanding(wiki=wiki, user_id=user_id)
+                    session.add(row)
+                    added += 1
+                standing = record.standing
+                row.username = standing.username
+                row.blocked_at = standing.blocked_at
+                row.block_expires_at = standing.block_expires_at
+                row.block_partial = standing.block_partial
+                row.globally_locked = standing.globally_locked
+                row.lock_checked_at = record.lock_checked_at
+                row.synced_at = now
+        return added, len(removed)
+
+    def standing_counts(self) -> dict[str, dict[str, int]]:
+        """Per wiki: how many accounts are tracked, and how many carry a block or a lock.
+
+        Deliberately not "how many are hidden". That depends on the threshold, which is
+        applied per response; reporting it here would put a second copy of the rule
+        somewhere it could drift from the first.
+        """
+        with self.database.session() as session:
+            rows = session.execute(
+                select(
+                    ContributorStanding.wiki,
+                    func.count(),
+                    func.sum(case((ContributorStanding.blocked_at.is_not(None), 1), else_=0)),
+                    func.sum(case((ContributorStanding.globally_locked, 1), else_=0)),
+                ).group_by(ContributorStanding.wiki)
+            ).all()
+        return {
+            str(wiki): {
+                "tracked": int(tracked),
+                "blocked": int(blocked or 0),
+                "locked": int(locked or 0),
+            }
+            for wiki, tracked, blocked, locked in rows
+        }
 
     def optout_counts(self) -> dict[str, int]:
         with self.database.session() as session:

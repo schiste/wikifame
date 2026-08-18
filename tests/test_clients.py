@@ -1,5 +1,5 @@
 import json
-from datetime import date
+from datetime import date, datetime
 
 import httpx
 import pytest
@@ -197,4 +197,84 @@ def test_a_paginated_category_is_followed_to_its_end() -> None:
     assert [member.page_id for member in members] == [1, 2, 3, 4]
     assert truncated is False
     assert requests[1].url.params["cmcontinue"] == "next"
+    client.close()
+
+
+def test_block_and_lock_arrive_from_the_calls_already_being_made() -> None:
+    """Neither fact costs a request of its own.
+
+    `blockinfo` rides on the `list=users` call that already answers about groups, and
+    the lock flag is in the CentralAuth response the bot check already fetches. The
+    only new cost is that the lock has to be asked for one account at a time, which is
+    why the sync rations it.
+    """
+    client = MediaWikiClient("tests", 1)
+    asked: list[str] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        params = request.url.params
+        if params.get("list") == "users":
+            asked.append(params["ususerids"])
+            return httpx.Response(
+                200,
+                json={
+                    "query": {
+                        "users": [
+                            {
+                                "userid": 1,
+                                "name": "Banni",
+                                "blockid": 42,
+                                "blockedtimestamp": "2026-08-18T08:41:59Z",
+                                "blockexpiry": "infinite",
+                                "blockpartial": False,
+                            },
+                            {
+                                "userid": 2,
+                                "name": "Puni",
+                                "blockid": 43,
+                                "blockedtimestamp": "2026-08-01T00:00:00Z",
+                                "blockexpiry": "2026-08-08T00:00:00Z",
+                                "blockpartial": True,
+                            },
+                            {"userid": 3, "name": "Propre"},
+                        ]
+                    }
+                },
+            )
+        return httpx.Response(
+            200,
+            json={"query": {"globaluserinfo": {"name": "Verrouille", "locked": True}}},
+        )
+
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    standings = client.fetch_standing("frwiki", [1, 2, 3])
+    assert asked == ["1|2|3"]
+    # "infinite" is not a date and must not be read as one: None here means the block
+    # never ends, which blocked_at is what distinguishes from "no block at all".
+    # Naive UTC, matching what the schema stores (`models.utcnow`).
+    assert standings[1].blocked_at == datetime.fromisoformat("2026-08-18T08:41:59")
+    assert standings[1].block_expires_at is None
+    assert standings[2].block_expires_at == datetime.fromisoformat("2026-08-08T00:00:00")
+    assert standings[2].block_partial is True
+    assert standings[3].blocked_at is None
+
+    assert client.global_user_info("frwiki", "Verrouille").locked is True
+    client.close()
+
+
+def test_an_account_that_is_not_locked_says_nothing_about_it() -> None:
+    """CentralAuth omits the field rather than sending false, so absence is the answer."""
+    client = MediaWikiClient("tests", 1)
+
+    def handler(_request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200, json={"query": {"globaluserinfo": {"name": "Schiste", "groups": []}}}
+        )
+
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
+
+    assert client.global_user_info("frwiki", "Schiste").locked is False
     client.close()

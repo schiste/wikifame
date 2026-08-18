@@ -4,7 +4,7 @@ import json
 from collections import Counter
 from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from itertools import islice
 from typing import Any
 from urllib.parse import quote, unquote
@@ -12,10 +12,41 @@ from urllib.parse import quote, unquote
 import httpx
 
 from wikifame.errors import PermanentDataError, ResponseTooLargeError, RetryableUpstreamError
-from wikifame.policy import ResolvedUser
+from wikifame.policy import AccountStanding, ResolvedUser
 from wikifame.sites import SiteResolver
 
 GLOBAL_GROUP_CACHE_SIZE = 4096
+
+# Everything MediaWiki says instead of a date when a block does not end.
+INDEFINITE_EXPIRIES = frozenset({"infinite", "infinity", "indefinite", "never"})
+
+
+def _parse_timestamp(value: Any) -> datetime | None:
+    """Turn a MediaWiki ISO-8601 timestamp into the naive UTC value the schema stores."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        # MediaWiki always sends a zone. If one ever arrives without, reading it as
+        # local time would silently shift every block by the server's offset.
+        return parsed
+    return parsed.astimezone(UTC).replace(tzinfo=None)
+
+
+@dataclass(frozen=True)
+class GlobalUserInfo:
+    """The CentralAuth facts about an account, from one request.
+
+    Groups and lock status arrive together, so they are cached together. Asking twice
+    for the same account would double the cost of the most expensive lookup the tool
+    makes — CentralAuth answers about one account per request.
+    """
+
+    groups: frozenset[str]
+    locked: bool
 
 
 @dataclass(frozen=True)
@@ -84,7 +115,7 @@ class MediaWikiClient:
         resolver: SiteResolver | None = None,
     ) -> None:
         self.resolver = resolver or SiteResolver()
-        self._global_groups: dict[str, frozenset[str]] = {}
+        self._global_users: dict[str, GlobalUserInfo] = {}
         self.client = httpx.Client(
             headers={"User-Agent": user_agent, "Accept": "application/json"},
             timeout=timeout_seconds,
@@ -232,18 +263,60 @@ class MediaWikiClient:
                 )
         return users
 
-    def global_groups(self, wiki: str, username: str) -> frozenset[str]:
-        """Return the CentralAuth global groups held by an account.
+    def fetch_standing(self, wiki: str, user_ids: Iterable[int]) -> dict[int, AccountStanding]:
+        """Return each account's local block state, fifty accounts per request.
+
+        `blockinfo` rides along on the same `list=users` call that already answers about
+        groups, so knowing whether an account is blocked costs no extra request. Only
+        active blocks appear: MediaWiki keeps no trace of one that has expired, which is
+        why the caller replaces the whole set rather than merging into it.
+
+        The global lock is not here. It is a CentralAuth fact and `list=users` answers
+        about one wiki, exactly as with global bot groups (ADR-0006); `global_user_info`
+        fetches it one account at a time.
+        """
+        standings: dict[int, AccountStanding] = {}
+        for batch in _batched(user_ids, 50):
+            data = self._action(
+                wiki,
+                {
+                    "action": "query",
+                    "list": "users",
+                    "ususerids": "|".join(str(user_id) for user_id in batch),
+                    "usprop": "blockinfo",
+                },
+            )
+            for item in data.get("query", {}).get("users", []):
+                user_id = int(item.get("userid", 0))
+                if user_id <= 0:
+                    continue
+                expiry = str(item.get("blockexpiry") or "")
+                standings[user_id] = AccountStanding(
+                    user_id=user_id,
+                    username=str(item.get("name", user_id)),
+                    blocked_at=_parse_timestamp(item.get("blockedtimestamp")),
+                    # None means "no end", not "unknown": the caller only reads it once
+                    # blocked_at says a block exists.
+                    block_expires_at=(
+                        None if expiry.lower() in INDEFINITE_EXPIRIES else _parse_timestamp(expiry)
+                    ),
+                    block_partial=bool(item.get("blockpartial")),
+                )
+        return standings
+
+    def global_user_info(self, wiki: str, username: str) -> GlobalUserInfo:
+        """Return the CentralAuth groups and lock status of an account.
 
         `list=users` answers about one wiki only, so a bot flagged globally and never
-        locally comes back with no groups at all (ADR-0006). CentralAuth answers about
-        one account per request, which is why callers ask only about accounts already in
-        contention rather than about the whole candidate pool.
+        locally comes back with no groups at all (ADR-0006), and a locked account comes
+        back looking unblocked. CentralAuth answers about one account per request, which
+        is why callers ask only about accounts already in contention rather than about
+        the whole candidate pool.
 
         Results are cached for the life of the process: a worker meets the same handful
         of prolific bots across thousands of pages.
         """
-        cached = self._global_groups.get(username)
+        cached = self._global_users.get(username)
         if cached is not None:
             return cached
 
@@ -257,12 +330,20 @@ class MediaWikiClient:
             },
         )
         info = data.get("query", {}).get("globaluserinfo", {})
-        groups = frozenset(info.get("groups") or ())
+        # "locked" is present and true when set, and absent otherwise; there is no
+        # false. An account with no global record at all is simply not locked.
+        resolved = GlobalUserInfo(
+            groups=frozenset(info.get("groups") or ()),
+            locked=bool(info.get("locked")),
+        )
 
-        if len(self._global_groups) >= GLOBAL_GROUP_CACHE_SIZE:
-            self._global_groups.clear()
-        self._global_groups[username] = groups
-        return groups
+        if len(self._global_users) >= GLOBAL_GROUP_CACHE_SIZE:
+            self._global_users.clear()
+        self._global_users[username] = resolved
+        return resolved
+
+    def global_groups(self, wiki: str, username: str) -> frozenset[str]:
+        return self.global_user_info(wiki, username).groups
 
     def get_wikitext(self, wiki: str, title: str) -> str | None:
         """Return a page's source, or None if there is no such page.

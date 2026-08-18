@@ -104,6 +104,32 @@ Its two environment controls are:
 
 See [ADR-0008](decisions/0008-article-opt-out.md) for what the list does and does not do.
 
+The sanctioned-contributor release adds the `contributor_standing` table, which
+`create_all()` creates on first start. Its controls are:
+
+- `HIDE_SANCTIONED_CONTRIBUTORS` (default `true`) — whether an account the wiki has lastingly
+  excluded is dropped from the names. Switching it off leaves `standing-sync` running, so
+  switching it back on takes effect on the next response rather than on the next run;
+- `MAX_VISIBLE_BLOCK_SECONDS` (default `7776000`, ninety days) — the longest block an account may
+  carry and still be named. Indefinite blocks and global locks exceed every threshold. Equal by
+  coincidence to `PAGE_FRESHNESS_SECONDS` and unrelated to it: one is about when an answer goes
+  stale, the other about what a community has decided about a person. Do not tie them;
+- `MAX_VISIBLE_BLOCK_SECONDS_BY_WIKI` (default empty) — per-wiki overrides as
+  `frwiki:2592000,enwiki:0`, where `0` withholds the name of anyone under an active non-partial
+  block. A malformed pair is dropped and that wiki keeps the global default, because these are
+  read at import time in the web process;
+- `STANDING_LOCK_CHECKS_PER_RUN` (default `500`) — CentralAuth answers about one account per
+  request, so lock checks are rationed and rotate, never-checked accounts first. Blocks are
+  refreshed for every tracked account on every run. At the defaults, and with the current few
+  thousand named accounts, every lock is confirmed within a day; the job logs when it caps out,
+  and that log line is the only signal that the rotation is falling behind;
+- `STANDING_LOCK_RECHECK_SECONDS` (default `86400`) — how old a lock check may be before that
+  account rejoins the queue.
+
+Expect roughly an hour between a block being imposed and the name disappearing, and up to a day
+for a global lock alone. The opt-out list stays the fast path when something must go now. See
+[ADR-0009](decisions/0009-sanctioned-contributor-visibility.md) for the rule and its edge cases.
+
 The universal-wiki release adds the `active_wikis` table, which `create_all()` creates on first
 start; no migration is required either. Its environment controls are:
 
@@ -197,6 +223,7 @@ Then inspect webservice logs and check that both worker replicas are running.
 | `gradual-backfill` | Hourly | Per `BACKFILL_WIKIS` entry, enqueues one resumable alphabetical batch at P10 |
 | `cache-cleanup` | Weekly | Removes old failed work and superseded result revisions |
 | `optout-sync` | Every 15 minutes | Per active wiki, materialises the on-wiki opt-out list into `page_optout` |
+| `standing-sync` | Hourly | Per active wiki, refreshes block and lock status for named accounts into `contributor_standing` |
 
 Live gadget misses and expired results enqueue P100 work. Prewarm and backfill skip any page with
 a result younger than `PAGE_FRESHNESS_SECONDS`. Do not increase worker replicas until WikiWho

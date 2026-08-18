@@ -212,6 +212,17 @@ request. An opted-out article still reports its full `distinct_contributors`. No
 the list governs presentation, which is why an entry takes effect — and reverses — in minutes
 without recomputation. See [ADR-0008](decisions/0008-article-opt-out.md).
 
+The same reasoning covers a different question: whether to name an account the wiki has since
+excluded. A credit under an article title speaks in the project's voice, and it should not
+contradict the project — but a block is also an ordinary editorial event, so the line is drawn by
+duration. `standing-sync` records each named account's local block and CentralAuth lock status in
+`contributor_standing`, and the API drops accounts that are globally locked or under a non-partial
+block longer than `MAX_VISIBLE_BLOCK_SECONDS`, ninety days by default. The rule is applied when the
+response is built rather than when the result is computed, because a sanction changes without
+anyone touching the article: baked into a stored row it would stay wrong for as long as that row
+stays fresh. `distinct_contributors` is unchanged and the dropped share moves into
+`other_contributors`. See [ADR-0009](decisions/0009-sanctioned-contributor-visibility.md).
+
 ## Known boundaries
 
 - WikiWho attributes surviving source-wikitext tokens, not rendered prose or editorial quality.

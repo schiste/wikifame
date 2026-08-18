@@ -60,6 +60,8 @@ policy, update behavior, privacy, and the path toward millions of articles.
   expire in minutes rather than days.
 - [ADR-0008](docs/decisions/0008-article-opt-out.md): the on-wiki list of articles counted but
   not named.
+- [ADR-0009](docs/decisions/0009-sanctioned-contributor-visibility.md): why an account the wiki
+  has lastingly excluded is not named, and why duration draws the line.
 - [Contributing](CONTRIBUTING.md): local workflow and change checklist.
 - [Agent guide](AGENTS.md): repository invariants and commands for coding agents.
 

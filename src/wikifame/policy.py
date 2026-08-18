@@ -3,6 +3,7 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 BOT_NAME_PATTERN = re.compile(r"bot$", re.IGNORECASE)
 
@@ -79,3 +80,71 @@ def should_highlight_contributor(
     ):
         return False
     return True
+
+
+@dataclass(frozen=True)
+class AccountStanding:
+    """What a wiki has formally decided about an account, at the moment it was read.
+
+    Deliberately separate from `ResolvedUser`. That one describes what an account *is*
+    and is consumed while a result is being computed; this one describes what has been
+    *decided about it*, changes without anyone touching the article, and is consumed
+    while a response is being built. Keeping them apart is what stops a sanction from
+    being baked into a stored row (ADR-0009).
+
+    `blocked_at` is None when no block is active. `block_expires_at` is None for an
+    indefinite block, which is why the two fields cannot be collapsed into a duration:
+    "no block" and "a block that never ends" are opposite answers.
+    """
+
+    user_id: int
+    username: str
+    blocked_at: datetime | None = None
+    block_expires_at: datetime | None = None
+    block_partial: bool = False
+    globally_locked: bool = False
+
+
+def is_nameable_account(
+    standing: AccountStanding | None,
+    max_visible_block_seconds: int,
+    now: datetime,
+) -> bool:
+    """Return whether an account may still be named among an article's contributors.
+
+    The rule is about lasting exclusion from the community, not about sanction as such.
+    A week's block is a normal editorial event and says nothing about the text the
+    account wrote; being locked or blocked for years is the wiki saying this person is
+    not one of its editors any more, and a credit line is a poor place to learn that.
+
+    Evaluated when the response is built, never when the result is computed, so the
+    threshold can be changed or the whole rule switched off without recomputing
+    anything. See ADR-0009.
+
+    An unknown account is nameable. Absence from the standing table means nobody has
+    looked yet, not that a lookup came back clean — and a sync that never ran must not
+    silently blank the names off a wiki. Same reasoning as the opt-out list: an empty
+    answer is an instruction only when it is an answer.
+    """
+    if standing is None:
+        return True
+    if standing.globally_locked:
+        # A lock has no expiry to compare against; it is the strongest statement the
+        # movement makes about an account, and it is global, so no local threshold
+        # applies to it.
+        return False
+    if standing.blocked_at is None:
+        return True
+    if standing.block_partial:
+        # A block scoped to a page or a namespace is a targeted editorial remedy, not a
+        # ban. Someone barred from one article may be a respected contributor elsewhere.
+        return True
+    if standing.block_expires_at is None:
+        return False
+    if standing.block_expires_at <= now:
+        # The row outlived the block it describes. MediaWiki keeps no trace of an expired
+        # block, so the next sync will drop it; until then, treat it as already gone
+        # rather than serving a sanction the wiki has stopped applying.
+        return True
+    duration = standing.block_expires_at - standing.blocked_at
+    return duration.total_seconds() <= max_visible_block_seconds

@@ -12,6 +12,28 @@ def _csv(value: str) -> tuple[str, ...]:
     return tuple(item.strip() for item in value.split(",") if item.strip())
 
 
+def _flag(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _int_by_wiki(value: str) -> tuple[tuple[str, int], ...]:
+    """Parse "frwiki:2592000,enwiki:0" into per-wiki overrides.
+
+    A malformed pair is dropped rather than raising. This is read at import time in a
+    web process, and a typo in one wiki's override must not take the whole service down
+    with it; the wiki simply keeps the global default.
+    """
+    overrides: list[tuple[str, int]] = []
+    for item in _csv(value):
+        wiki, separator, seconds = item.partition(":")
+        if separator and wiki.strip() and seconds.strip().lstrip("-").isdigit():
+            overrides.append((wiki.strip(), int(seconds.strip())))
+    return tuple(overrides)
+
+
 def _database_url() -> str:
     explicit_url = os.getenv("DATABASE_URL")
     if explicit_url:
@@ -58,7 +80,25 @@ class Settings:
     page_stale_while_revalidate_seconds: int
     optout_page: str
     optout_category_limit: int
+    hide_sanctioned_contributors: bool
+    max_visible_block_seconds: int
+    max_visible_block_seconds_by_wiki: tuple[tuple[str, int], ...]
+    standing_lock_checks_per_run: int
+    standing_lock_recheck_seconds: int
     methodology_url: str
+
+    def max_visible_block_seconds_for(self, wiki: str) -> int:
+        """The longest block an account may carry on this wiki and still be named.
+
+        Per-wiki rather than global because the question is a community's, not an
+        operator's: what counts as a sanction serious enough to stop crediting someone
+        differs between projects, and one number imposed on seventy wikis would be a
+        policy decision dressed up as a default.
+        """
+        for configured_wiki, seconds in self.max_visible_block_seconds_by_wiki:
+            if configured_wiki == wiki:
+                return seconds
+        return self.max_visible_block_seconds
 
     @classmethod
     def from_env(cls) -> Settings:
@@ -132,6 +172,26 @@ class Settings:
             # category; the sync logs the truncation rather than silently covering part
             # of it, because "half of this category is opted out" is not an opt-out.
             optout_category_limit=int(os.getenv("OPTOUT_CATEGORY_LIMIT", "5000")),
+            # On by default. Leaving it off would have been the conservative-looking
+            # choice, but the default is what almost every wiki will run, so the default
+            # is the policy; ADR-0009 argues it out rather than deferring it.
+            hide_sanctioned_contributors=_flag("HIDE_SANCTIONED_CONTRIBUTORS", True),
+            # Ninety days. Long enough that ordinary editorial sanctions — a week, a
+            # month, a summer — leave a contributor named, short enough that a year-long
+            # block or an indefinite one does not. Numerically equal to
+            # PAGE_FRESHNESS_SECONDS and unrelated to it: that one is about when an
+            # answer goes stale, this one about what a wiki has decided about a person.
+            max_visible_block_seconds=int(os.getenv("MAX_VISIBLE_BLOCK_SECONDS", str(90 * 86400))),
+            max_visible_block_seconds_by_wiki=_int_by_wiki(
+                os.getenv("MAX_VISIBLE_BLOCK_SECONDS_BY_WIKI", "")
+            ),
+            # CentralAuth answers about one account per request, so the lock pass is
+            # rationed and rotates. Blocks are refreshed for every tracked account on
+            # every run; only locks queue.
+            standing_lock_checks_per_run=int(os.getenv("STANDING_LOCK_CHECKS_PER_RUN", "500")),
+            standing_lock_recheck_seconds=int(
+                os.getenv("STANDING_LOCK_RECHECK_SECONDS", str(86400))
+            ),
             methodology_url=os.getenv(
                 "METHODOLOGY_URL",
                 "https://github.com/schiste/wikifame/blob/main/docs/architecture.md",

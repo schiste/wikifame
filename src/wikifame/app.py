@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from wikifame.models import AttributionResult, utcnow
+from wikifame.policy import is_nameable_account
 from wikifame.runtime import Runtime, build_runtime
 
 
@@ -46,19 +47,64 @@ def _if_none_match(header: str | None, etag: str) -> bool:
     return False
 
 
-def _attribution_fields(result: AttributionResult, opted_out: bool) -> dict[str, Any]:
-    """The part of a ready answer an opt-out changes.
+def _nameable_contributors(
+    runtime: Runtime, wiki: str, contributors: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    """Drop the accounts this wiki has put lastingly out of the community.
 
-    Opting a page out drops the names and keeps the count, so the sentence becomes
-    "written by 47 people" rather than disappearing: the count is not a name, and losing
-    it would hide that the article has a history at all. Both endpoints go through here
-    so that neither can become a way around the list.
+    Applied here rather than in the worker for the same reason the opt-out is: a
+    sanction is a fact about a person that changes without anyone touching the article.
+    Filtering when the answer is built means a block imposed this morning takes effect
+    within the hour, and lifting one restores the name just as fast, with nothing
+    recomputed and `algorithm_version` unmoved. ADR-0009.
+
+    The list shrinks; it is not backfilled from a fourth contributor, because only three
+    were ever stored. Naming two people instead of three is a smaller loss than making
+    every response depend on a recomputation, and the missing share is not lost — it
+    moves into `other_contributors`.
+    """
+    settings = runtime.settings
+    if not settings.hide_sanctioned_contributors or not contributors:
+        return contributors
+
+    user_ids = [
+        contributor["user_id"]
+        for contributor in contributors
+        if isinstance(contributor.get("user_id"), int)
+    ]
+    standings = runtime.repository.standing_for(wiki, user_ids)
+    threshold = settings.max_visible_block_seconds_for(wiki)
+    now = utcnow()
+    return [
+        contributor
+        for contributor in contributors
+        if is_nameable_account(standings.get(contributor.get("user_id")), threshold, now)
+    ]
+
+
+def _attribution_fields(
+    runtime: Runtime, wiki: str, page_id: int, result: AttributionResult
+) -> dict[str, Any]:
+    """The part of a ready answer that presentation policy changes.
+
+    Two rules meet here, and they are not the same rule. An opt-out is about an article
+    and drops every name; a sanction is about a person and drops one. Both leave
+    `distinct_contributors` alone, so the sentence becomes "written by 47 people" or
+    "by Alice and 46 others" rather than disappearing: the count is not a name, and
+    losing it would hide that the article has a history at all.
+
+    Only `opted_out` is reported. There is no matching flag for a withheld name, on
+    purpose — it would be a machine-readable announcement that one of this article's
+    main authors is banned, which is a worse disclosure than the credit it replaces.
 
     Nothing is deleted. The stored row keeps its contributors — they are public page
-    history — and the opt-out governs what is presented, which is what makes adding or
-    removing an entry take effect without recomputing anything.
+    history — and both rules govern what is presented, which is what makes them take
+    effect, and be undone, without recomputing anything.
     """
-    contributors: list[dict[str, Any]] = [] if opted_out else list(result.contributors)
+    opted_out = runtime.repository.is_opted_out(wiki, page_id)
+    contributors: list[dict[str, Any]] = (
+        [] if opted_out else _nameable_contributors(runtime, wiki, list(result.contributors))
+    )
     return {
         "contributors": contributors,
         "distinct_contributors": result.distinct_contributors,
@@ -105,6 +151,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             "active_wikis": app_runtime.repository.active_wikis(),
             "cache": app_runtime.repository.stats(),
             "opted_out": app_runtime.repository.optout_counts(),
+            "standing": app_runtime.repository.standing_counts(),
         }
 
     @app.get("/v1/{wiki}/pages/{page_id}", response_model=None)
@@ -133,7 +180,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 "title": result.title,
                 "algorithm_version": result.algorithm_version,
                 "metric": result.metric,
-                **_attribution_fields(result, app_runtime.repository.is_opted_out(wiki, page_id)),
+                **_attribution_fields(app_runtime, wiki, page_id, result),
                 "count_limited": result.count_limited,
                 "countable_tokens": result.countable_tokens,
                 "computed_at": _isoformat(result.computed_at),
@@ -243,7 +290,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 "title": result.title,
                 "algorithm_version": result.algorithm_version,
                 "metric": result.metric,
-                **_attribution_fields(result, app_runtime.repository.is_opted_out(wiki, page_id)),
+                **_attribution_fields(app_runtime, wiki, page_id, result),
                 "count_limited": result.count_limited,
                 "countable_tokens": result.countable_tokens,
                 "computed_at": _isoformat(result.computed_at),

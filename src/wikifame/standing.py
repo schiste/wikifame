@@ -1,0 +1,182 @@
+"""Materialise what each wiki has decided about the accounts WikiFame names.
+
+A credit line saying an article was written by someone the community has since banned
+is the tool speaking for the wiki and getting it wrong. The fix cannot live where the
+result is computed: a block is imposed and lifted without anyone touching the article,
+so a filtered stored row would go stale for as long as the result stays fresh — up to
+ninety days. So the rule is applied when the response is built, and this job is the
+bridge, because the serve path is not allowed to call MediaWiki.
+
+Two facts, two costs. A local block arrives fifty accounts per request and is refreshed
+for every tracked account on every run. A CentralAuth lock costs one request per
+account, so it is refreshed on a rotation and each row remembers when its turn came.
+
+Only accounts the stored results actually name are tracked — a few thousand, not the
+wiki's whole block log, because the top contributors of popular articles are the same
+prolific editors over and over. See ADR-0009.
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+from datetime import timedelta
+
+from wikifame.clients import MediaWikiClient
+from wikifame.errors import WikiFameError
+from wikifame.models import utcnow
+from wikifame.policy import AccountStanding
+from wikifame.repository import StandingRecord
+from wikifame.runtime import Runtime, build_runtime
+
+LOGGER = logging.getLogger(__name__)
+
+
+def sync_wiki(
+    runtime: Runtime,
+    mediawiki: MediaWikiClient,
+    wiki: str,
+    dry_run: bool = False,
+) -> tuple[int, int, int, int]:
+    """Refresh one wiki's tracked accounts. Returns (tracked, added, removed, locks_checked).
+
+    Raises if the block pass cannot reach MediaWiki, which leaves the stored table
+    exactly as it was. Losing contact with a wiki must not read as "every sanction was
+    lifted" any more than it reads as "everybody withdrew their opt-out".
+    """
+    settings = runtime.settings
+    now = utcnow()
+    user_ids = runtime.repository.named_contributor_ids(wiki)
+    known = runtime.repository.standing_records(wiki)
+
+    # Raises on failure, before anything is written.
+    blocks = mediawiki.fetch_standing(wiki, user_ids)
+
+    cutoff = now - timedelta(seconds=settings.standing_lock_recheck_seconds)
+    due = set(
+        runtime.repository.lock_check_candidates(
+            wiki, cutoff, settings.standing_lock_checks_per_run
+        )
+    )
+    # An account nobody has ever tracked has no row yet, so it cannot be in the query
+    # above. It is the one most worth asking about, so it jumps the queue.
+    unseen = [user_id for user_id in user_ids if user_id not in known]
+    due.update(unseen[: max(0, settings.standing_lock_checks_per_run - len(due))])
+
+    records: list[StandingRecord] = []
+    locks_checked = 0
+    for user_id in user_ids:
+        previous = known.get(user_id)
+        block = blocks.get(user_id)
+        if block is None:
+            # MediaWiki did not answer for this ID — a deleted or renamed account. Keep
+            # what was known rather than inventing a clean slate for it.
+            if previous is not None:
+                records.append(previous)
+            continue
+
+        locked = previous.standing.globally_locked if previous else False
+        lock_checked_at = previous.lock_checked_at if previous else None
+        if user_id in due:
+            try:
+                locked = mediawiki.global_user_info(wiki, block.username).locked
+                lock_checked_at = now
+                locks_checked += 1
+            except WikiFameError as error:
+                # One account's lock check failing must not cost the whole run its block
+                # pass. Leaving lock_checked_at alone puts it back at the front of the
+                # queue next time.
+                LOGGER.warning("%s: lock check failed for %s (%s)", wiki, block.username, error)
+
+        records.append(
+            StandingRecord(
+                standing=AccountStanding(
+                    user_id=user_id,
+                    username=block.username,
+                    blocked_at=block.blocked_at,
+                    block_expires_at=block.block_expires_at,
+                    block_partial=block.block_partial,
+                    globally_locked=locked,
+                ),
+                lock_checked_at=lock_checked_at,
+            )
+        )
+
+    if len(due) >= settings.standing_lock_checks_per_run:
+        LOGGER.info(
+            "%s: lock checks capped at %s this run; the rest keep their previous status",
+            wiki,
+            settings.standing_lock_checks_per_run,
+        )
+
+    if dry_run:
+        LOGGER.info(
+            "%s: %s named accounts, %s would have their lock status read",
+            wiki,
+            len(records),
+            len(due),
+        )
+        return len(records), 0, 0, 0
+
+    added, removed = runtime.repository.replace_standing(wiki, records)
+    LOGGER.info(
+        "%s: %s named accounts tracked (+%s, -%s), %s lock checks",
+        wiki,
+        len(records),
+        added,
+        removed,
+        locks_checked,
+    )
+    return len(records), added, removed, locks_checked
+
+
+def resolve_target_wikis(runtime: Runtime, explicit: str | None) -> list[str]:
+    """Wikis worth reading standings for: the ones that have produced a result."""
+    if explicit:
+        return [explicit]
+    return [wiki for wiki in runtime.repository.active_wikis() if runtime.resolver.is_capable(wiki)]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(
+        description="Refresh block and lock status for the accounts WikiFame names"
+    )
+    parser.add_argument("--wiki", default=None, help="Sync one wiki instead of every active one")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Report what would be read without changing what is served",
+    )
+    args = parser.parse_args()
+    logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(message)s")
+
+    runtime = build_runtime()
+    runtime.database.create_schema()
+    wikis = resolve_target_wikis(runtime, args.wiki)
+    if not wikis:
+        LOGGER.info("no active wiki to read account standings for yet")
+        return
+
+    if not runtime.settings.hide_sanctioned_contributors:
+        # Still synced. The table is a record of facts, and keeping it current means
+        # switching the rule back on takes effect immediately rather than after a run.
+        LOGGER.info("HIDE_SANCTIONED_CONTRIBUTORS is off; standings are tracked but not applied")
+
+    mediawiki = MediaWikiClient(
+        runtime.settings.user_agent, runtime.settings.request_timeout_seconds, runtime.resolver
+    )
+    try:
+        tracked = 0
+        for wiki in wikis:
+            try:
+                tracked += sync_wiki(runtime, mediawiki, wiki, args.dry_run)[0]
+            except WikiFameError as error:
+                # One unreachable wiki keeps its previous standings rather than losing them.
+                LOGGER.warning("%s: standing sync skipped, table unchanged (%s)", wiki, error)
+        LOGGER.info("%s accounts tracked across %s wikis", tracked, len(wikis))
+    finally:
+        mediawiki.close()
+
+
+if __name__ == "__main__":
+    main()
