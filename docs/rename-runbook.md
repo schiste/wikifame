@@ -152,7 +152,26 @@ The only window where anything can look broken. Do it in one sitting.
    toolforge jobs delete attribution-worker    # and each scheduled job
    ```
 
-2. Run the migration from the new tool and compare the six table counts it prints:
+2. Sweep the queue, so the copy does not carry the breakage across:
+
+   ```bash
+   toolforge jobs run cleanup-once --image tool-wikifame/tool-wikifame:latest \
+     --command "python -m wikifame.cleanup --queue-days 0" --mount all --wait
+   toolforge jobs logs cleanup-once && toolforge jobs delete cleanup-once
+   ```
+
+   `--queue-days 0` is the point. `cache-cleanup` runs weekly with a 30-day cutoff, and the
+   dead rows worth dropping are hours old — WikiWho refuses in bursts, so the queue collects
+   `upstream_unavailable` faster than any age-based rule will clear it. Zero means "every row
+   already in state `dead` or `superseded`", and nothing else: `pending` and `leased` are
+   untouched, and so are results. This has to run *after* the jobs stop, or the worker will
+   have made more dead rows by the time the copy starts.
+
+   A rehearsal on 2026-08-18 removed 726 rows (578 dead, 148 superseded) and 0 results.
+   Results prune to zero because they are upserted on `uq_result_revision_algorithm`, so no
+   superseded copy is ever left behind to find.
+
+3. Run the migration from the new tool and compare the six table counts it prints:
 
    ```bash
    toolforge envvars create MIGRATE_SOURCE_URL    # prompts; not in ps, not in history
@@ -164,7 +183,7 @@ The only window where anything can look broken. Do it in one sitting.
    ```
 
    It exits non-zero if any table's three counts disagree, but read them anyway.
-3. Deploy the renamed repository to the new tool and start its jobs:
+4. Deploy the renamed repository to the new tool and start its jobs:
 
    ```bash
    scp jobs.yaml login.toolforge.org:/mnt/nfs/labstore-secondary-tools-project/wikipeople/jobs.yaml
@@ -176,10 +195,20 @@ The only window where anything can look broken. Do it in one sitting.
    `jobs load` prints one line per job; count them against `jobs.yaml` before believing it,
    and check that `jobs show attribution-worker` reports a start time after the build. That
    restart has silently no-op'd more than once.
-4. **Maintainer, in one session on-wiki:** publish `User:<name>/wikipeople.js`, replace the
-   CSS block in `global.css`, and move the opt-out page. Between the first and last of these
-   the styling is wrong, which is why they are one step and not three.
-5. Replace the old tool's web service with 301 redirects to the new host.
+5. **Maintainer, in one session on-wiki**, four pages that are one step because between the
+   first and the last the gadget is loading against names nothing answers to:
+
+   | Page | What it is |
+   | --- | --- |
+   | `User:<name>/wikipeople.js` | the script |
+   | `User:<name>/wikipeople.css` | its styles — the 89 renamed class names live here |
+   | `User:<name>/common.js` | the two `importScript` / `importStylesheet` lines |
+   | `User:<name>/wikipeople-optout` | the opt-out list, matching `OPTOUT_PAGE` |
+
+   Readers who wrote their own `User:<name>/wikifame-config.json` have to move it too; the
+   gadget reads the new suffix and treats a missing page as "no settings", so nothing breaks
+   loudly — their preferences just quietly revert to the defaults.
+6. Replace the old tool's web service with 301 redirects to the new host.
 
 **Gate:** a known frwiki article returns the same names as before the switch, and
 `wikifame.toolforge.org/v2/...` redirects.
@@ -204,6 +233,6 @@ Only after the grace period, and in this order:
 | --- | --- |
 | 1 | Delete the new tool. Nothing else was touched. |
 | 2 | `git revert`. Production still runs the old commit. |
-| 3, before step 4 | Restart the old tool's jobs. It still holds its data; only minutes are lost. |
-| 3, after step 4 | Re-publish the previous gadget and CSS from git history, and point it back. |
+| 3, before step 5 | Restart the old tool's jobs. It still holds its data; only minutes are lost. |
+| 3, after step 5 | Re-publish the previous gadget and CSS from git history, and point it back. |
 | 4 | None. This is what makes it the last step. |
