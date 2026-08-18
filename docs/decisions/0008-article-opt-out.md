@@ -31,7 +31,10 @@ operator, applying to every reader rather than to the one who set it.
 - It is ordinary wikitext. An entry is a bulleted line whose first link names an article or
   a category; everything else on the page — headings, prose, a note explaining an entry,
   a link to the discussion that produced it — is ignored. The page therefore has a
-  history, a watchlist and a talk page, and needs no special rights to edit.
+  history, a watchlist and a talk page, and needs no special rights to edit. A starter copy of
+  the page lives at `docs/onwiki/optout.fr.wiki`; because its format is a contract rather than
+  prose, it is tracked and `tests/test_optout.py` runs the parser over it and over each rule it
+  states.
 - A **category** entry covers the articles directly in that category. Categories are not
   walked recursively: one line must not be able to reach an unbounded and unreviewable
   part of the wiki, and a tree that genuinely needs covering is several lines, which is

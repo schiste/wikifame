@@ -308,3 +308,46 @@ def test_opting_out_invalidates_a_readers_cached_copy(tmp_path: Path) -> None:
         )
         assert after.status_code == 200, "a copy holding the names must not validate as current"
         assert after.json()["contributors"] == []
+
+
+STARTER_PAGE = Path(__file__).resolve().parents[1] / "docs/onwiki/optout.fr.wiki"
+
+
+def test_the_starter_page_ships_with_no_entries() -> None:
+    """The copy communities paste must opt nobody out on arrival.
+
+    It is dense with the syntax it documents — bulleted rules, bracketed examples,
+    commented-out entries — and any of that read as an entry would hide names on an
+    article nobody listed.
+    """
+    assert parse_optout_page(STARTER_PAGE.read_text(encoding="utf-8")) == []
+
+
+def test_the_starter_page_documents_the_rules_the_parser_actually_applies() -> None:
+    """The page tells editors what counts as an entry. This is that claim, executed.
+
+    The page is not prose about the feature, it is the input format. A rule that drifts
+    from the parser sends someone away believing an article is covered when it is not.
+    """
+    # "the first non-blank character after the bullet is a link"
+    assert parse_optout_page("* [[Machin]]") == ["Machin"]
+    assert parse_optout_page("* Voir [[Machin]]") == []
+    # "only the first link is read; the rest of the line is free"
+    assert parse_optout_page("* [[Machin]] — demandé en PdD, voir [[Truc]]") == ["Machin"]
+    # "a display name, an anchor and underscores are tolerated"
+    assert parse_optout_page("* [[Machin|un autre nom]]") == ["Machin"]
+    assert parse_optout_page("* [[Machin#Section]]") == ["Machin"]
+    assert parse_optout_page("* [[Machin_Truc]]") == ["Machin Truc"]
+    # "nested bullets count as bullets"
+    assert parse_optout_page("** [[Machin]]") == ["Machin"]
+    # "a duplicate has no effect"
+    assert parse_optout_page("* [[Machin]]\n* [[Machin]]") == ["Machin"]
+    # "not an entry: prose, tables, numbered lists, indented lines"
+    assert parse_optout_page("[[Machin]]") == []
+    assert parse_optout_page("| [[Machin]] || et la suite") == []
+    assert parse_optout_page("# [[Machin]]") == []
+    assert parse_optout_page(": [[Machin]]") == []
+    # "anything between comment markers, including an entry commented out"
+    assert parse_optout_page("<!--\n* [[Machin]]\n-->") == []
+    # "a colon prefixes a category link"
+    assert parse_optout_page("* [[:Catégorie:Machin]]") == ["Catégorie:Machin"]

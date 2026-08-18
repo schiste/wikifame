@@ -242,7 +242,8 @@ must stop being served entirely.
 
 This is a community decision and needs no deployment. Add the article — or a category it belongs
 to — as a bulleted link on `Wikipédia:WikiFame/opt-out` (or the same page in the local project
-namespace). `optout-sync` picks it up within fifteen minutes, and readers see the change once
+namespace). Where that page does not exist yet, `docs/onwiki/optout.fr.wiki` is a starter copy to
+paste: it documents the entry format for editors and ships with no entries. `optout-sync` picks it up within fifteen minutes, and readers see the change once
 their five-minute cache lapses. Removing the entry reverses it just as quickly; nothing is
 recomputed either way.
 
