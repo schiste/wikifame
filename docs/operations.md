@@ -152,11 +152,18 @@ When a community adopts the script as a site-wide gadget, its configuration move
 After merging a code change:
 
 ```bash
+scp jobs.yaml login.toolforge.org:/mnt/nfs/labstore-secondary-tools-project/wikifame/jobs.yaml
 toolforge build start https://github.com/schiste/wikifame
 toolforge webservice buildservice restart
 toolforge jobs load jobs.yaml
 toolforge jobs restart attribution-worker
 ```
+
+The first line is easy to forget and fails quietly. `toolforge build` reads the repository from
+GitHub, but `toolforge jobs load` reads a copy of `jobs.yaml` that lives in the tool's home
+directory and is not a checkout of anything. A deployment that adds or changes a job definition
+loads the *old* file, reports success, and leaves the new job uncreated. `jobs load` prints one
+line per job it loaded; count them against `jobs.yaml` before believing it.
 
 The last line is not redundant. `jobs load` reconciles the job *definition*, and a deployment
 that changes only code leaves that definition identical, so nothing is recreated and the
@@ -169,6 +176,7 @@ Confirm the rollout before believing it:
 
 ```bash
 toolforge jobs show attribution-worker    # "Started at" must be after the build
+toolforge jobs list                       # every job in jobs.yaml must appear
 curl -fsS https://wikifame.toolforge.org/v1/stats
 ```
 
