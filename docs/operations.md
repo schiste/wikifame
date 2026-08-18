@@ -111,7 +111,9 @@ The sanctioned-contributor release adds the `contributor_standing` table, which
   excluded is dropped from the names. Switching it off leaves `standing-sync` running, so
   switching it back on takes effect on the next response rather than on the next run;
 - `MAX_VISIBLE_BLOCK_SECONDS` (default `7776000`, ninety days) — the longest block an account may
-  carry and still be named. Indefinite blocks and global locks exceed every threshold. Equal by
+  carry and still be named. Indefinite blocks exceed every threshold, as do global locks whose
+  steward reason reads as a sanction; a lock recorded as deceased, vanished or compromised does
+  not withhold a name, and neither does one whose reason cannot be read. Equal by
   coincidence to `PAGE_FRESHNESS_SECONDS` and unrelated to it: one is about when an answer goes
   stale, the other about what a community has decided about a person. Do not tie them;
 - `MAX_VISIBLE_BLOCK_SECONDS_BY_WIKI` (default empty) — per-wiki overrides as

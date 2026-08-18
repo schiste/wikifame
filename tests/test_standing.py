@@ -31,14 +31,17 @@ class FakeMediaWiki:
         self,
         blocks: dict[int, AccountStanding] | None = None,
         locked: set[str] | None = None,
+        lock_reasons: dict[str, str] | None = None,
         fail_blocks: bool = False,
         fail_locks: set[str] | None = None,
     ) -> None:
         self.blocks = blocks or {}
         self.locked = locked or set()
+        self.lock_reasons = lock_reasons or {}
         self.fail_blocks = fail_blocks
         self.fail_locks = fail_locks or set()
         self.lock_lookups: list[str] = []
+        self.reason_lookups: list[str] = []
 
     def fetch_standing(self, _wiki: str, user_ids: list[int]) -> dict[int, AccountStanding]:
         if self.fail_blocks:
@@ -55,6 +58,10 @@ class FakeMediaWiki:
         if username in self.fail_locks:
             raise RetryableUpstreamError("CentralAuth indisponible")
         return GlobalUserInfo(groups=frozenset(), locked=username in self.locked)
+
+    def global_lock_reason(self, username: str) -> str | None:
+        self.reason_lookups.append(username)
+        return self.lock_reasons.get(username, "Long-term abuse")
 
 
 # --- the rule itself -------------------------------------------------------------
@@ -118,14 +125,71 @@ def test_a_block_that_has_since_expired_leaves_the_name() -> None:
     assert is_nameable_account(account, NINETY_DAYS, NOW) is True
 
 
-def test_a_global_lock_withholds_the_name_whatever_the_threshold() -> None:
-    """A lock has no duration to compare against, and it is not a local decision.
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "Long-term abuse, per [[:m:Special:Permalink/30919000]]",
+        "long-term abuse",
+        "Spam-only account",
+        "Lock evasion: Malu Paul",
+        "Cross-wiki abuse",
+        "Globally or WMF banned user",
+        "sockpuppetry",
+    ],
+)
+def test_a_lock_imposed_as_a_sanction_withholds_the_name(reason: str) -> None:
+    """A sanctioning lock has no duration to compare against, and it is not local.
 
-    It is also the case a local block check cannot see: an account locked for
-    cross-wiki abuse may have no block at all on the wiki where it wrote the article.
+    It is the case a local block check cannot see: an account locked for cross-wiki
+    abuse may have no block at all on the wiki where it wrote the article.
     """
-    assert is_nameable_account(standing(globally_locked=True), NINETY_DAYS, NOW) is False
-    assert is_nameable_account(standing(globally_locked=True), 10**9, NOW) is False
+    account = standing(globally_locked=True, lock_reason=reason)
+    assert is_nameable_account(account, NINETY_DAYS, NOW) is False
+    assert is_nameable_account(account, 10**9, NOW) is False
+
+
+@pytest.mark.parametrize(
+    "reason",
+    [
+        "Deceased user",
+        "Deceased Wikipedian",
+        "per [[m:Special:Permalink/28773743|request]]: Deceased user",
+        "reported as deceased; see [[Special:Permalink/17723815]]",
+        "This user vanish request has been automatically processed",
+        "per [[m:Special:GlobalRenameQueue/request/18100]]",
+        "Compromised account",
+        "Requested by the user",
+    ],
+)
+def test_a_lock_imposed_as_a_courtesy_leaves_the_name(reason: str) -> None:
+    """Stewards use one lock mechanism for opposite purposes.
+
+    They lock abusers, and they lock the accounts of editors who have died, who have
+    vanished, or whose account was compromised. The first production run of this rule
+    read the flag alone and withheld the credit of five deceased Wikipedians — the exact
+    opposite of what it is for. These are their real lock reasons.
+    """
+    account = standing(globally_locked=True, lock_reason=reason)
+    assert is_nameable_account(account, NINETY_DAYS, NOW) is True
+    assert is_nameable_account(account, 0, NOW) is True
+
+
+def test_a_lock_whose_reason_is_unknown_leaves_the_name() -> None:
+    """Absence of data is not a finding, here as everywhere else in this module.
+
+    An unreadable log, a steward's unfamiliar phrasing, or a row written before reasons
+    were stored all arrive as no reason at all. Failing towards naming costs a sanction
+    missed; failing the other way costs someone erased for no reason anyone can state.
+    """
+    assert is_nameable_account(standing(globally_locked=True), NINETY_DAYS, NOW) is True
+    assert is_nameable_account(standing(globally_locked=True, lock_reason=""), NINETY_DAYS, NOW)
+
+
+def test_a_courtesy_lock_does_not_rescue_an_account_its_wiki_has_banned() -> None:
+    """The two rules are independent. A deceased editor who was also indefinitely
+    blocked locally stays withheld on the strength of the block alone."""
+    account = standing(blocked_at=NOW - DAY, globally_locked=True, lock_reason="Deceased user")
+    assert is_nameable_account(account, NINETY_DAYS, NOW) is False
 
 
 def test_a_threshold_of_zero_withholds_every_blocked_name() -> None:
@@ -345,6 +409,33 @@ def test_the_job_tracks_only_the_accounts_results_actually_name(tmp_path: Path) 
     stored = runtime.repository.standing_records("frwiki")
     assert stored[2].standing.globally_locked is True
     assert stored[1].standing.globally_locked is False
+    # Only the locked account costs the second request. The reason is what separates a
+    # ban from a memorial, and asking about it for every account would double the price
+    # of the most expensive lookup the tool makes.
+    assert mediawiki.reason_lookups == ["U2"]
+    assert stored[2].standing.lock_reason == "Long-term abuse"
+    assert stored[1].standing.lock_reason is None
+
+
+def test_a_courtesy_locked_contributor_keeps_their_name_end_to_end(tmp_path: Path) -> None:
+    """The production defect, from the job through to the response.
+
+    The first live run of this rule withheld five deceased Wikipedians on enwiki, none
+    of whom carried any block at all. The flag was true and the reason went unread.
+    """
+    runtime = make_runtime(tmp_path, "memorial.db")
+    save(runtime, 100, CONTRIBUTORS)
+    sync_wiki(
+        runtime,
+        FakeMediaWiki(locked={"U2"}, lock_reasons={"U2": "Deceased user"}),
+        "frwiki",
+    )
+
+    with TestClient(create_app(runtime)) as client:
+        payload = client.get("/v2/frwiki/pages/100?revision_id=200").json()
+
+    assert [c["username"] for c in payload["contributors"]] == ["Alice", "Banni", "Claire"]
+    assert payload["other_contributors"] == 44
 
 
 def test_an_account_no_result_names_any_more_is_dropped(tmp_path: Path) -> None:

@@ -39,7 +39,8 @@ built. The rule is configurable per wiki and is on by default.**
 
 An account is not named when either:
 
-- it is **globally locked**, whatever the local threshold, because a lock has no expiry to
+- it is **globally locked for a reason that reads as a sanction**, whatever the local
+  threshold, because such a lock has no expiry to
   measure and is not a local decision; or
 - it carries a **non-partial local block** whose duration exceeds
   `MAX_VISIBLE_BLOCK_SECONDS` — ninety days by default — where an indefinite block counts
@@ -55,7 +56,9 @@ Everything else is named. In particular:
 | Indefinite block | no | no end date is not a short block |
 | Partial block | yes | a block scoped to a page is a remedy, not a ban |
 | Block that has since expired | yes | the row outlived the sanction |
-| Globally locked | no | the strongest exclusion there is |
+| Locked for abuse, spam, ban evasion | no | the strongest exclusion there is |
+| Locked as deceased, vanished, compromised | yes | the same mechanism, the opposite meaning |
+| Locked for an unrecognised reason | yes | absence of data is not a finding |
 | Account never checked | yes | absence of data is not a finding |
 
 The last row is the one that matters operationally. A sync that has never run leaves every
@@ -63,7 +66,32 @@ account absent from the table, and reading absence as "sanctioned" would blank t
 off a whole wiki the first time the job was late. This is the same rule the opt-out
 follows: an empty answer is an instruction only when it is an answer.
 
-### Where the rule runs
+#### A lock does not mean one thing
+
+The first production run of this rule withheld the credit of five deceased Wikipedians on
+enwiki — SlimVirgin, Yoninah, MarnetteD, Gobonobo, Bhadani — none of whom carried any block
+at all. That was not a bug in the code; it was this decision being wrong. CentralAuth has
+one lock mechanism and stewards use it for opposite purposes. They lock abusers, and they
+lock the accounts of editors who have died, who have exercised the right to vanish, or
+whose account was compromised. `meta=globaluserinfo` reports the flag and not the purpose,
+so reading the flag alone turns a memorial into a ban.
+
+The purpose is recoverable: the `globalauth` log on Meta carries the steward's reason, and
+the sanctioning ones are formulaic — "long-term abuse", "spam-only account", "lock
+evasion", "cross-wiki abuse", "globally or WMF banned user". Courtesy locks share none of
+that vocabulary. So a lock withholds a name only when its reason affirmatively matches a
+sanction, and an unreadable, missing or unfamiliar reason leaves the account nameable.
+
+That default is the same one the rest of the rule runs on. Failing towards naming costs a
+sanction occasionally missed, which leaves a name up that the block pass usually catches
+anyway. Failing the other way costs someone erased for a reason nobody can state, and the
+population it erases first is the one least able to object.
+
+The reason costs one extra request, made only for accounts already found locked — well
+under one percent of those tracked — and asked of Meta rather than of the wiki being
+served, because only Meta holds that log.
+
+## Where the rule runs
 
 **When the response is built, never when the result is computed.** This is the whole
 design and it follows from one observation: *a sanction changes without anyone touching

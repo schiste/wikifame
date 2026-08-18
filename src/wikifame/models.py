@@ -159,6 +159,10 @@ class ContributorStanding(Base):
     different amounts to obtain. Block status arrives fifty accounts per request; a
     global lock costs one request per account, so locks are refreshed on a rotation and
     each row remembers when its turn last came.
+
+    `lock_reason` is stored because the flag alone does not say what the lock means.
+    Stewards use one mechanism for opposite purposes, and a memorial lock must not read
+    as a ban; `is_sanction_lock` is what tells them apart, and it needs the text.
     """
 
     __tablename__ = "contributor_standing"
@@ -171,5 +175,6 @@ class ContributorStanding(Base):
     block_expires_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     block_partial: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     globally_locked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    lock_reason: Mapped[str | None] = mapped_column(String(255), nullable=True)
     lock_checked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)

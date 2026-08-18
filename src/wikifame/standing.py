@@ -76,10 +76,14 @@ def sync_wiki(
             continue
 
         locked = previous.standing.globally_locked if previous else False
+        lock_reason = previous.standing.lock_reason if previous else None
         lock_checked_at = previous.lock_checked_at if previous else None
         if user_id in due:
             try:
                 locked = mediawiki.global_user_info(wiki, block.username).locked
+                # Only a locked account costs the second request, and only its reason can
+                # tell a ban from a memorial. See is_sanction_lock.
+                lock_reason = mediawiki.global_lock_reason(block.username) if locked else None
                 lock_checked_at = now
                 locks_checked += 1
             except WikiFameError as error:
@@ -97,6 +101,7 @@ def sync_wiki(
                     block_expires_at=block.block_expires_at,
                     block_partial=block.block_partial,
                     globally_locked=locked,
+                    lock_reason=lock_reason,
                 ),
                 lock_checked_at=lock_checked_at,
             )

@@ -55,7 +55,7 @@ calculation remain usable across ordinary edits for `PAGE_FRESHNESS_SECONDS`, 90
   as an error or fall back to another source of names. See
   [ADR-0008](decisions/0008-article-opt-out.md).
 - `contributors` may be shorter than the ranking that produced it. An account the wiki has
-  lastingly excluded — globally locked, or under a non-partial block longer than the wiki's
+  lastingly excluded — locked globally as a sanction, or under a non-partial block longer than the wiki's
   threshold, ninety days by default — is dropped when the response is built. There is no flag for
   it, deliberately: a machine-readable "one of this article's main authors is banned" would be a
   worse disclosure than the credit it replaces. `distinct_contributors` is unchanged and the

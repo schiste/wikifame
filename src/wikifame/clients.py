@@ -17,6 +17,10 @@ from wikifame.sites import SiteResolver
 
 GLOBAL_GROUP_CACHE_SIZE = 4096
 
+# CentralAuth's log of lock and unlock actions lives on Meta and nowhere else. Every
+# wiki can be asked whether an account is locked, but only this one can say why.
+GLOBAL_ACCOUNT_LOG_HOST = "meta.wikimedia.org"
+
 # Everything MediaWiki says instead of a date when a block does not end.
 INDEFINITE_EXPIRIES = frozenset({"infinite", "infinity", "indefinite", "never"})
 
@@ -126,9 +130,12 @@ class MediaWikiClient:
         return self.resolver.host(wiki)
 
     def _action(self, wiki: str, params: dict[str, Any]) -> dict[str, Any]:
+        return self._request(self.host(wiki), params)
+
+    def _request(self, host: str, params: dict[str, Any]) -> dict[str, Any]:
         try:
             response = self.client.get(
-                f"https://{self.host(wiki)}/w/api.php",
+                f"https://{host}/w/api.php",
                 params={"format": "json", "formatversion": 2, **params},
             )
             response.raise_for_status()
@@ -303,6 +310,36 @@ class MediaWikiClient:
                     block_partial=bool(item.get("blockpartial")),
                 )
         return standings
+
+    def global_lock_reason(self, username: str) -> str | None:
+        """Return the comment on the most recent global-account log entry for an account.
+
+        CentralAuth exposes that an account is locked but not why, and the why is what
+        separates a banned abuser from a Wikipedian who has died. The reason lives in the
+        `globalauth` log, which is one extra request — but only for accounts already
+        found locked, which is well under one percent of those tracked.
+
+        Asked of Meta rather than of the wiki being served: any wiki will say whether an
+        account is locked, but the log of who locked it and why exists only there.
+
+        Returns None when the log has nothing to say, which leaves the account nameable.
+        """
+        data = self._request(
+            GLOBAL_ACCOUNT_LOG_HOST,
+            {
+                "action": "query",
+                "list": "logevents",
+                "letype": "globalauth",
+                "letitle": f"User:{username}@global",
+                "leprop": "comment|timestamp",
+                "lelimit": 1,
+            },
+        )
+        events = data.get("query", {}).get("logevents", [])
+        if not events:
+            return None
+        comment = str(events[0].get("comment") or "").strip()
+        return comment[:255] or None
 
     def global_user_info(self, wiki: str, username: str) -> GlobalUserInfo:
         """Return the CentralAuth groups and lock status of an account.

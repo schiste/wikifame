@@ -7,6 +7,15 @@ from datetime import datetime
 
 BOT_NAME_PATTERN = re.compile(r"bot$", re.IGNORECASE)
 
+# Stewards write lock reasons as free text, but the sanctioning ones are formulaic:
+# "long-term abuse", "spam-only account", "lock evasion", "cross-wiki abuse",
+# "globally or WMF banned user". None of the courtesy reasons share this vocabulary.
+LOCK_SANCTION_PATTERN = re.compile(
+    r"abuse|abusiv|\bspam|\blta\b|lock evasion|block evasion|\bbanned\b|\bban\b"
+    r"|sock|vandal|harass|phishing|troll|\bufa\b|unauthori[sz]ed bot",
+    re.IGNORECASE,
+)
+
 GlobalGroupLookup = Callable[[str], frozenset[str]]
 
 
@@ -103,6 +112,30 @@ class AccountStanding:
     block_expires_at: datetime | None = None
     block_partial: bool = False
     globally_locked: bool = False
+    lock_reason: str | None = None
+
+
+def is_sanction_lock(standing: AccountStanding) -> bool:
+    """Return whether a global lock was imposed as a sanction rather than as a courtesy.
+
+    CentralAuth has one lock mechanism and uses it for opposite purposes. Stewards lock
+    abusers, and they also lock the accounts of editors who have died, who have exercised
+    the right to vanish, or whose account was compromised. Reading the flag alone treats
+    a memorial as a ban: the first production run of ADR-0009 withheld the credit of five
+    deceased Wikipedians, which is the exact opposite of what the rule is for.
+
+    So the flag is not enough and the reason decides. A lock withholds a name only when
+    its reason affirmatively reads as a sanction; an unreadable, missing or unfamiliar
+    reason leaves the account nameable. That is the same principle the rest of this
+    module runs on — absence of data is not a finding — and it fails the safe way: the
+    cost of missing a sanction is a name that stays up, while the cost of guessing wrong
+    in the other direction is erasing someone who did nothing wrong.
+    """
+    if not standing.globally_locked:
+        return False
+    if not standing.lock_reason:
+        return False
+    return LOCK_SANCTION_PATTERN.search(standing.lock_reason) is not None
 
 
 def is_nameable_account(
@@ -128,10 +161,10 @@ def is_nameable_account(
     """
     if standing is None:
         return True
-    if standing.globally_locked:
-        # A lock has no expiry to compare against; it is the strongest statement the
-        # movement makes about an account, and it is global, so no local threshold
-        # applies to it.
+    if is_sanction_lock(standing):
+        # A lock imposed as a sanction has no expiry to compare against; it is the
+        # strongest statement the movement makes about an account, and it is global, so
+        # no local threshold applies to it.
         return False
     if standing.blocked_at is None:
         return True
