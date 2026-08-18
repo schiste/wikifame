@@ -500,6 +500,38 @@ def test_a_courtesy_locked_contributor_keeps_their_name_end_to_end(tmp_path: Pat
     assert payload["other_contributors"] == 44
 
 
+def test_a_courtesy_blocked_contributor_keeps_their_name_end_to_end(tmp_path: Path) -> None:
+    """The block-side twin, and the reason it is tested through the job.
+
+    The rule itself was right the first time; the sync built its record without the
+    reason, so every stored row said None and every courtesy read as a sanction. A test
+    of the policy alone cannot see that. This one runs the whole path.
+    """
+    runtime = make_runtime(tmp_path, "courtesy-block.db")
+    save(runtime, 100, CONTRIBUTORS)
+    sync_wiki(
+        runtime,
+        FakeMediaWiki(
+            blocks={
+                2: AccountStanding(
+                    user_id=2,
+                    username="Banni",
+                    blocked_at=utcnow(),
+                    block_reason="Bloqué à sa demande (blocked at own request)",
+                )
+            }
+        ),
+        "frwiki",
+    )
+
+    assert runtime.repository.standing_records("frwiki")[2].standing.block_reason is not None
+
+    with TestClient(create_app(runtime)) as client:
+        payload = client.get("/v2/frwiki/pages/100?revision_id=200").json()
+
+    assert [c["username"] for c in payload["contributors"]] == ["Alice", "Banni", "Claire"]
+
+
 def test_an_account_no_result_names_any_more_is_dropped(tmp_path: Path) -> None:
     runtime = make_runtime(tmp_path, "drop.db")
     save(runtime, 100, CONTRIBUTORS)

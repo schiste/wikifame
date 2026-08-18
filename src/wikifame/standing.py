@@ -100,6 +100,7 @@ def sync_wiki(
                     blocked_at=block.blocked_at,
                     block_expires_at=block.block_expires_at,
                     block_partial=block.block_partial,
+                    block_reason=block.block_reason,
                     globally_locked=locked,
                     lock_reason=lock_reason,
                 ),
