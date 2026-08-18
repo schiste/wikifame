@@ -174,15 +174,37 @@ The only window where anything can look broken. Do it in one sitting.
 3. Run the migration from the new tool and compare the six table counts it prints:
 
    ```bash
-   toolforge envvars create MIGRATE_SOURCE_URL    # prompts; not in ps, not in history
-   toolforge envvars create MIGRATE_TARGET_URL
-   toolforge jobs run migrate --image tool-wikipeople/tool-wikipeople:latest \
-     --command "python -m wikipeople.migrate" --wait
-   toolforge jobs logs migrate
-   toolforge envvars delete MIGRATE_SOURCE_URL && toolforge envvars delete MIGRATE_TARGET_URL
+   # `envvars create` reads stdin when the value is omitted, so build each DSN inside
+   # the owning tool's account and pipe it. The password never reaches argv.
+   become wikifame python3 dsn.py s57988__wikifame \
+     | become wikipeople toolforge envvars create MIGRATE_SOURCE_URL
+   become wikipeople python3 dsn.py s57997__wikipeople \
+     | become wikipeople toolforge envvars create MIGRATE_TARGET_URL
+
+   toolforge jobs run migrate-once --image tool-wikipeople/tool-wikipeople:latest \
+     --command "python -m wikipeople.migrate --force-empty" --mount all --wait
+   toolforge jobs logs migrate-once
+
+   toolforge envvars delete MIGRATE_SOURCE_URL --yes-im-sure   # see the warning below
+   toolforge envvars delete MIGRATE_TARGET_URL --yes-im-sure
    ```
 
+   Build the new tool's image *before* this step, not in step 4 — the `migrate` module
+   only exists in a build made after the phase-2 commit, and a stale image fails here
+   with `No module named wikipeople.migrate`.
+
+   `--force-empty` will be needed if the gadget went live first: the new host starts
+   collecting enqueued work from the first reader who loads a page. Those rows are minutes
+   old and re-enqueue on the next view, so replacing them costs nothing.
+
    It exits non-zero if any table's three counts disagree, but read them anyway.
+
+   > **`toolforge envvars delete` prints the deleted value in clear text.** Not the name —
+   > the value. Deleting a variable that held a DSN therefore writes a database password to
+   > the terminal, and to whatever captured it. There is no quiet flag. Assume both ToolsDB
+   > passwords are disclosed once this step runs and rotate them; the alternative is to keep
+   > the variables and accept that credentials for the old database sit in the new tool's
+   > configuration indefinitely, which is worse.
 4. Deploy the renamed repository to the new tool and start its jobs:
 
    ```bash
@@ -208,7 +230,20 @@ The only window where anything can look broken. Do it in one sitting.
    Readers who wrote their own `User:<name>/wikifame-config.json` have to move it too; the
    gadget reads the new suffix and treats a missing page as "no settings", so nothing breaks
    loudly — their preferences just quietly revert to the defaults.
-6. Replace the old tool's web service with 301 redirects to the new host.
+6. Replace the old tool's web service with 301 redirects to the new host. Stop the build
+   service and start a lighttpd one over a `~/.lighttpd.conf` holding:
+
+   ```
+   url.redirect-code = 301
+   url.redirect = ( "^/(.*)$" => "https://wikipeople.toolforge.org/$1" )
+   ```
+
+   ```bash
+   toolforge webservice buildservice stop && toolforge webservice php8.2 start
+   ```
+
+   The capture group carries the path, and lighttpd appends the query string on its own —
+   check a `/v2/...?revision_id=...` URL, not just `/v1/stats`, before believing it.
 
 **Gate:** a known frwiki article returns the same names as before the switch, and
 `wikifame.toolforge.org/v2/...` redirects.
