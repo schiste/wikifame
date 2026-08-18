@@ -3,3 +3,4 @@ worker: python -m wikifame.worker
 prewarm: python -m wikifame.prewarm --days 7
 backfill: python -m wikifame.backfill --batches 1
 cleanup: python -m wikifame.cleanup
+optout: python -m wikifame.optout

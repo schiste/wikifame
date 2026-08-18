@@ -41,3 +41,19 @@ def test_page_freshness_defaults_are_explicit(monkeypatch: MonkeyPatch) -> None:
     assert settings.page_cache_seconds == 5 * 60
     assert settings.ready_cache_seconds == 5 * 60
     assert settings.page_stale_while_revalidate_seconds == 7 * 24 * 60 * 60
+
+
+def test_the_optout_page_title_is_one_title_for_every_wiki(monkeypatch: MonkeyPatch) -> None:
+    """ "Project:" is a canonical prefix MediaWiki resolves per wiki.
+
+    It reaches "Wikipédia:WikiFame/opt-out" on frwiki and "Wikipedia:WikiFame/opt-out"
+    on enwiki without this service holding a table of namespace names it would have to
+    keep in step with seventy communities.
+    """
+    monkeypatch.delenv("OPTOUT_PAGE", raising=False)
+    monkeypatch.delenv("OPTOUT_CATEGORY_LIMIT", raising=False)
+
+    settings = Settings.from_env()
+
+    assert settings.optout_page == "Project:WikiFame/opt-out"
+    assert settings.optout_category_limit == 5000

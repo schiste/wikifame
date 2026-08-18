@@ -32,6 +32,7 @@ calculation remain usable across ordinary edits for `PAGE_FRESHNESS_SECONDS`, 90
   "contributors": [],
   "distinct_contributors": 47,
   "other_contributors": 47,
+  "opted_out": false,
   "count_limited": false,
   "countable_tokens": 987,
   "computed_at": "2026-08-16T10:00:00Z",
@@ -48,6 +49,11 @@ calculation remain usable across ordinary edits for `PAGE_FRESHNESS_SECONDS`, 90
   claim. Treat an unrecognized value as the weaker claim, never the stronger one. Contributor
   entries carry `token_count` under the first metric and `edit_count` under the second; `share`
   is present under both and is a share of that metric.
+- `opted_out` says the wiki has asked for this article to be counted but not named. It is then
+  always accompanied by an empty `contributors` list and an unchanged `distinct_contributors`, so
+  the sentence becomes "written by 47 people" rather than disappearing. Clients must not treat it
+  as an error or fall back to another source of names. See
+  [ADR-0008](decisions/0008-article-opt-out.md).
 - `source_revision_id` is the exact revision analyzed by WikiWho.
 - `requested_revision_id` is the revision displayed when the request was made.
 - `is_fresh` is true until `computed_at + PAGE_FRESHNESS_SECONDS`.
@@ -119,6 +125,7 @@ revision IDs are stable.
   ],
   "distinct_contributors": 47,
   "other_contributors": 46,
+  "opted_out": false,
   "count_limited": false,
   "countable_tokens": 987,
   "computed_at": "2026-08-16T10:00:00Z",
@@ -128,6 +135,9 @@ revision IDs are stable.
 
 `share` is a fraction between zero and one. `other_contributors` is always
 `max(0, distinct_contributors - contributors.length)`.
+
+`opted_out` behaves exactly as it does on v2. The opt-out is applied when the response is built,
+so it cannot be sidestepped by asking v1 for an exact revision.
 
 Ready responses use:
 
@@ -198,8 +208,8 @@ produced at least one real result, or once an operator lists it in `PREWARM_WIKI
 
 - `GET /healthz`: database connectivity probe; returns `{"status":"ok"}`.
 - `GET /v1/stats`: aggregate ready and queue counts, plus `supported_wikis` (the configured
-  enablement, `["*"]` by default) and `active_wikis` (wikis that have produced a result and are
-  therefore prewarmed). Do not scrape at high frequency because an exact result count can become
+  enablement, `["*"]` by default), `active_wikis` (wikis that have produced a result and are
+  therefore prewarmed), and `opted_out` (articles covered by each wiki's opt-out list). Do not scrape at high frequency because an exact result count can become
   expensive on a large InnoDB table.
 - `GET /docs`: generated OpenAPI interface. This documents HTTP structure, while this file
   documents behavioral guarantees.

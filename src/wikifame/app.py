@@ -11,7 +11,7 @@ from fastapi import FastAPI, HTTPException, Query, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from wikifame.models import utcnow
+from wikifame.models import AttributionResult, utcnow
 from wikifame.runtime import Runtime, build_runtime
 
 
@@ -44,6 +44,27 @@ def _if_none_match(header: str | None, etag: str) -> bool:
         if candidate == etag:
             return True
     return False
+
+
+def _attribution_fields(result: AttributionResult, opted_out: bool) -> dict[str, Any]:
+    """The part of a ready answer an opt-out changes.
+
+    Opting a page out drops the names and keeps the count, so the sentence becomes
+    "written by 47 people" rather than disappearing: the count is not a name, and losing
+    it would hide that the article has a history at all. Both endpoints go through here
+    so that neither can become a way around the list.
+
+    Nothing is deleted. The stored row keeps its contributors — they are public page
+    history — and the opt-out governs what is presented, which is what makes adding or
+    removing an entry take effect without recomputing anything.
+    """
+    contributors: list[dict[str, Any]] = [] if opted_out else list(result.contributors)
+    return {
+        "contributors": contributors,
+        "distinct_contributors": result.distinct_contributors,
+        "other_contributors": max(0, result.distinct_contributors - len(contributors)),
+        "opted_out": opted_out,
+    }
 
 
 def create_app(runtime: Runtime | None = None) -> FastAPI:
@@ -83,6 +104,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             "supported_wikis": list(app_runtime.settings.supported_wikis),
             "active_wikis": app_runtime.repository.active_wikis(),
             "cache": app_runtime.repository.stats(),
+            "opted_out": app_runtime.repository.optout_counts(),
         }
 
     @app.get("/v1/{wiki}/pages/{page_id}", response_model=None)
@@ -103,7 +125,6 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
             wiki, page_id, revision_id, settings.algorithm_version
         )
         if result is not None:
-            other_contributors = max(0, result.distinct_contributors - len(result.contributors))
             payload = {
                 "status": "ready",
                 "wiki": result.wiki,
@@ -112,9 +133,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 "title": result.title,
                 "algorithm_version": result.algorithm_version,
                 "metric": result.metric,
-                "contributors": result.contributors,
-                "distinct_contributors": result.distinct_contributors,
-                "other_contributors": other_contributors,
+                **_attribution_fields(result, app_runtime.repository.is_opted_out(wiki, page_id)),
                 "count_limited": result.count_limited,
                 "countable_tokens": result.countable_tokens,
                 "computed_at": _isoformat(result.computed_at),
@@ -215,7 +234,6 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 )
                 refreshing = work is not None and work.state in {"pending", "leased"}
 
-            other_contributors = max(0, result.distinct_contributors - len(result.contributors))
             payload = {
                 "status": "ready",
                 "wiki": result.wiki,
@@ -225,9 +243,7 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
                 "title": result.title,
                 "algorithm_version": result.algorithm_version,
                 "metric": result.metric,
-                "contributors": result.contributors,
-                "distinct_contributors": result.distinct_contributors,
-                "other_contributors": other_contributors,
+                **_attribution_fields(result, app_runtime.repository.is_opted_out(wiki, page_id)),
                 "count_limited": result.count_limited,
                 "countable_tokens": result.countable_tokens,
                 "computed_at": _isoformat(result.computed_at),

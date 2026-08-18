@@ -27,6 +27,30 @@ class PageMetadata:
 
 
 @dataclass(frozen=True)
+class TitleInfo:
+    """A title as MediaWiki understands it, whether or not the page exists.
+
+    The namespace number is the point of asking. It is what separates an article from a
+    category without this code having to know that a category is "Catégorie" here,
+    "Kategorie" there and "Категория" elsewhere. Guessing prefixes would work on one
+    wiki; asking works on all of them.
+
+    `page_id` is None for a title that does not exist. A redlinked category is still a
+    usable instruction, because a category can have members without having a page.
+    """
+
+    title: str
+    namespace: int
+    page_id: int | None
+
+
+@dataclass(frozen=True)
+class CategoryMember:
+    page_id: int
+    title: str
+
+
+@dataclass(frozen=True)
 class EditorCount:
     count: int
     limited: bool
@@ -239,6 +263,99 @@ class MediaWikiClient:
             self._global_groups.clear()
         self._global_groups[username] = groups
         return groups
+
+    def get_wikitext(self, wiki: str, title: str) -> str | None:
+        """Return a page's source, or None if there is no such page.
+
+        None means "MediaWiki answered, and the page is not there", which is different
+        from "MediaWiki did not answer" — that raises. Callers act on the difference:
+        one is an empty list, the other is a reason to change nothing.
+        """
+        data = self._action(
+            wiki,
+            {
+                "action": "query",
+                "titles": title,
+                "prop": "revisions",
+                "rvprop": "content",
+                "rvslots": "main",
+                "rvlimit": 1,
+            },
+        )
+        pages = data.get("query", {}).get("pages", [])
+        if not pages or pages[0].get("missing") or pages[0].get("invalid"):
+            return None
+        revisions = pages[0].get("revisions", [])
+        if not revisions:
+            return None
+        return str(revisions[0].get("slots", {}).get("main", {}).get("content", ""))
+
+    def classify_titles(self, wiki: str, titles: list[str]) -> list[TitleInfo]:
+        """Resolve titles to their namespace and page ID, following redirects.
+
+        Redirects are followed on purpose: someone listing a redirect means the article
+        it points at, and the alternative is an entry that silently does nothing.
+        """
+        infos: list[TitleInfo] = []
+        for start in range(0, len(titles), 50):
+            data = self._action(
+                wiki,
+                {
+                    "action": "query",
+                    "titles": "|".join(titles[start : start + 50]),
+                    "redirects": 1,
+                },
+            )
+            for page in data.get("query", {}).get("pages", []):
+                if page.get("invalid"):
+                    continue
+                infos.append(
+                    TitleInfo(
+                        title=str(page.get("title", "")),
+                        namespace=int(page.get("ns", 0)),
+                        page_id=None if page.get("missing") else int(page["pageid"]),
+                    )
+                )
+        return infos
+
+    def category_members(
+        self, wiki: str, category: str, limit: int
+    ) -> tuple[list[CategoryMember], bool]:
+        """Return the articles directly in a category, and whether the cap cut the list short.
+
+        Direct members only. Recursing would make one entry on a list page reach an
+        unbounded and unreviewable part of the wiki, and category graphs on Wikipedia
+        are wide enough that "Personnalité vivante" would swallow most of the project.
+        A category tree that genuinely needs covering is several entries on the list,
+        which is the point at which someone has to look at what they are covering.
+        """
+        members: list[CategoryMember] = []
+        continuation: dict[str, Any] = {}
+        while len(members) < limit:
+            data = self._action(
+                wiki,
+                {
+                    "action": "query",
+                    "list": "categorymembers",
+                    "cmtitle": category,
+                    "cmnamespace": 0,
+                    "cmlimit": "max",
+                    "cmprop": "ids|title",
+                    **continuation,
+                },
+            )
+            for member in data.get("query", {}).get("categorymembers", []):
+                members.append(
+                    CategoryMember(page_id=int(member["pageid"]), title=str(member["title"]))
+                )
+            continuation = data.get("continue", {})
+            if not continuation:
+                # The list ended on its own, which is not the same as fitting. One batch
+                # answers with as many members as the wiki will hand over at once, so it
+                # can overshoot the cap and still be the last one. Compare against the cap
+                # rather than trusting the absence of a continuation token.
+                return members[:limit], len(members) > limit
+        return members[:limit], True
 
     def resolve_titles(self, wiki: str, titles: list[str]) -> list[PageMetadata]:
         pages: list[PageMetadata] = []

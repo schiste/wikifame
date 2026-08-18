@@ -117,3 +117,26 @@ class AppState(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=utcnow, onupdate=utcnow
     )
+
+
+class PageOptOut(Base):
+    """A page whose contributors are counted but not named.
+
+    Rows are materialised from an on-wiki list by the `optout` job and read on every
+    ready response. Storing page IDs rather than titles keeps the serve path to one
+    primary-key lookup: it never has to normalise a title, and it is not allowed to ask
+    MediaWiki anything. A page also keeps its ID across a rename, so the opt-out follows
+    the article rather than the name someone happened to list it under.
+
+    `source` records which list entry put the row here — the page itself, or the
+    category it belongs to — so "why is this article opted out?" is answerable without
+    re-deriving the whole list.
+    """
+
+    __tablename__ = "page_optout"
+
+    wiki: Mapped[str] = mapped_column(String(64), primary_key=True)
+    page_id: Mapped[int] = mapped_column(BigInteger, primary_key=True)
+    title: Mapped[str] = mapped_column(String(512), nullable=False)
+    source: Mapped[str] = mapped_column(String(512), nullable=False)
+    synced_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=utcnow)

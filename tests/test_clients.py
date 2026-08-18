@@ -130,3 +130,71 @@ def test_unpublished_pageview_day_returns_none() -> None:
 
     assert client.top_pages("frwiki", date(2026, 8, 15)) is None
     client.close()
+
+
+def make_category_client(batches: list[dict]) -> tuple[MediaWikiClient, list[httpx.Request]]:
+    client = MediaWikiClient("tests", 1)
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        return httpx.Response(200, json=batches[len(requests) - 1])
+
+    client.client.close()
+    client.client = httpx.Client(transport=httpx.MockTransport(handler))
+    return client, requests
+
+
+def members_batch(start: int, count: int, continuation: str | None = None) -> dict:
+    batch: dict = {
+        "query": {
+            "categorymembers": [
+                {"pageid": page_id, "title": f"Article {page_id}"}
+                for page_id in range(start, start + count)
+            ]
+        }
+    }
+    if continuation is not None:
+        batch["continue"] = {"cmcontinue": continuation}
+    return batch
+
+
+def test_a_category_larger_than_the_cap_is_cut_and_reported() -> None:
+    """One batch can overshoot the cap and still be the last one.
+
+    `cmlimit=max` hands over as many members as the wiki will give at once, so a
+    category of 253 arrives complete in a single answer with no continuation token.
+    Reading "no continuation" as "it fitted" would return the whole category above a
+    cap of 10 and report it as untruncated.
+    """
+    client, requests = make_category_client([members_batch(1, 253)])
+
+    members, truncated = client.category_members("frwiki", "Catégorie:Exemple", 10)
+
+    assert len(members) == 10
+    assert truncated is True
+    assert len(requests) == 1
+    client.close()
+
+
+def test_a_category_that_exactly_fills_the_cap_is_not_called_truncated() -> None:
+    client, _requests = make_category_client([members_batch(1, 10)])
+
+    members, truncated = client.category_members("frwiki", "Catégorie:Exemple", 10)
+
+    assert len(members) == 10
+    assert truncated is False
+    client.close()
+
+
+def test_a_paginated_category_is_followed_to_its_end() -> None:
+    client, requests = make_category_client(
+        [members_batch(1, 2, continuation="next"), members_batch(3, 2)]
+    )
+
+    members, truncated = client.category_members("frwiki", "Catégorie:Exemple", 100)
+
+    assert [member.page_id for member in members] == [1, 2, 3, 4]
+    assert truncated is False
+    assert requests[1].url.params["cmcontinue"] == "next"
+    client.close()

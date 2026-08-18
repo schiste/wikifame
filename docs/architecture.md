@@ -203,6 +203,15 @@ Revision-specific responses contain no reader identifier and are safe for public
 service still receives an IP address and article ID on a cache miss, so access logs should use
 short retention and must never be repurposed as reader profiles.
 
+Attribution is public page-history data, but a credit under an article title is not the same act
+as a page history, and it is not always welcome. Each wiki therefore maintains a list of articles
+WikiFame counts but does not name, at `Project:WikiFame/opt-out` in its own project namespace. The
+`optout-sync` job materialises that list into `page_optout`; the API applies it while building
+every ready response, on both endpoints, so it cannot be sidestepped by the gadget or by a direct
+request. An opted-out article still reports its full `distinct_contributors`. Nothing is deleted:
+the list governs presentation, which is why an entry takes effect — and reverses — in minutes
+without recomputation. See [ADR-0008](decisions/0008-article-opt-out.md).
+
 ## Known boundaries
 
 - WikiWho attributes surviving source-wikitext tokens, not rendered prose or editorial quality.
@@ -211,6 +220,10 @@ short retention and must never be repurposed as reader profiles.
 - `Base.metadata.create_all()` creates a fresh schema but is not a migration framework. Introduce
   versioned migrations before changing a database that already contains production data.
 - The gadget has no page-specific fixture; every article uses traceable Toolforge data.
+- The opt-out list is materialised on a schedule, so an entry is live within fifteen minutes
+  rather than instantly, and a wiki whose Action API is unreachable keeps the list it last read.
+  A blanked or vandalised list page names everyone again until it is reverted; `/v1/stats` reports
+  the per-wiki count so the collapse is observable.
 - WikiWho covers Wikipedia only. Commons, Wikidata, Wiktionary, and Wikisource have no surviving-
   token provenance at all, so the dividing line is the project, not the language.
 - Database-name resolution assumes every WikiWho language code is dash-free. A dashed code such

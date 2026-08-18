@@ -86,6 +86,18 @@ view once their five-minute window lapses. Before ETags existed this took up to 
 year on v1; if you are debugging a stale answer in a browser, check `sessionStorage` for
 `wikifame:*` as well, which the gadget holds for five minutes.
 
+The opt-out release adds the `page_optout` table, which `create_all()` creates on first start.
+Its two environment controls are:
+
+- `OPTOUT_PAGE` (default `Project:WikiFame/opt-out`) — the on-wiki list each community maintains.
+  MediaWiki resolves the canonical `Project:` prefix per wiki, so one value reaches
+  `Wikipédia:WikiFame/opt-out` on frwiki and `Wikipedia:WikiFame/opt-out` on enwiki;
+- `OPTOUT_CATEGORY_LIMIT` (default `5000`) — how many articles one category entry may cover.
+  Categories are not walked recursively. A category past the cap is logged as truncated by
+  `optout-sync`, and that log line is the only signal, so read it.
+
+See [ADR-0008](decisions/0008-article-opt-out.md) for what the list does and does not do.
+
 The universal-wiki release adds the `active_wikis` table, which `create_all()` creates on first
 start; no migration is required either. Its environment controls are:
 
@@ -170,6 +182,7 @@ Then inspect webservice logs and check that both worker replicas are running.
 | `popular-prewarm` | Daily | Per active wiki, scans backward to enqueue seven available top-1000 lists at P50 |
 | `gradual-backfill` | Hourly | Per `BACKFILL_WIKIS` entry, enqueues one resumable alphabetical batch at P10 |
 | `cache-cleanup` | Weekly | Removes old failed work and superseded result revisions |
+| `optout-sync` | Every 15 minutes | Per active wiki, materialises the on-wiki opt-out list into `page_optout` |
 
 Live gadget misses and expired results enqueue P100 work. Prewarm and backfill skip any page with
 a result younger than `PAGE_FRESHNESS_SECONDS`. Do not increase worker replicas until WikiWho
@@ -184,7 +197,9 @@ the run. `gradual-backfill` does nothing while `BACKFILL_WIKIS` is empty.
 Check:
 
 - `/healthz` for database reachability;
-- `/v1/stats` occasionally for queue growth, dead items, and the `active_wikis` list;
+- `/v1/stats` occasionally for queue growth, dead items, the `active_wikis` list, and the
+  per-wiki `opted_out` counts — a count that drops to zero on a wiki that had entries means the
+  list page was blanked, moved, or is being read from the wrong title;
 - `/v2/{wiki}/pages/{page_id}?revision_id={revision_id}` for `is_fresh`, `refreshing`, and the
   `X-WikiFame-Source-Revision` header on a known article;
 - `toolforge webservice buildservice logs -f` for API errors;
@@ -214,6 +229,25 @@ This is a local decision and needs no deployment. Each user sets `"enabled": fal
 `User:<name>/wikifame-config.json`, or simply removes the import from their `common.js`. Removing
 the wiki from `SUPPORTED_WIKIS` is the operator-side equivalent and is only needed when the wiki
 must stop being served entirely.
+
+### An article should stop naming its contributors
+
+This is a community decision and needs no deployment. Add the article — or a category it belongs
+to — as a bulleted link on `Wikipédia:WikiFame/opt-out` (or the same page in the local project
+namespace). `optout-sync` picks it up within fifteen minutes, and readers see the change once
+their five-minute cache lapses. Removing the entry reverses it just as quickly; nothing is
+recomputed either way.
+
+To check what a list will cover before it takes effect:
+
+```bash
+python -m wikifame.optout --wiki frwiki --dry-run
+```
+
+If a page seems not to be covered, the sync log names what it dropped and why: a redlinked title,
+a link in a namespace that is neither article nor category, or a category past
+`OPTOUT_CATEGORY_LIMIT`. A wiki whose Action API was unreachable keeps its previous list rather
+than losing it, and says so in the log.
 
 ### A policy result is wrong
 
@@ -249,5 +283,7 @@ to test restoration before a migration.
 - Identify the on-wiki personal script/gadget pages and interface-administrator contacts.
 - List the wikis in `active_wikis`, the on-wiki script and configuration pages in use on each,
   and any community agreements made when each wiki was enabled.
+- Identify each wiki's opt-out list page and who watches it; a list nobody watches is a list that
+  silently stops working.
 - Review open incidents, dead queue reasons, algorithm version, and current gadget behavior.
 - Rotate credentials that were personally controlled.

@@ -25,3 +25,10 @@
   schedule: "@weekly"
   timeout: 3600
   emails: onfailure
+
+- name: optout-sync
+  image: tool-wikifame/tool-wikifame:latest
+  command: optout
+  schedule: "*/15 * * * *"
+  timeout: 900
+  emails: onfailure

@@ -27,6 +27,7 @@ and their daughter**. This project turns their family idea into an open Wikimedi
 - `src/wikifame/prewarm.py`: preloads popular articles from Wikimedia pageviews.
 - `src/wikifame/backfill.py`: resumable, low-priority long-tail coverage.
 - `src/wikifame/cleanup.py`: queue and old-revision retention.
+- `src/wikifame/optout.py`: reads each wiki's on-wiki opt-out list into servable rows.
 
 The gadget uses a page-level result for up to 90 days. After that period, the API serves the
 last known attribution while a worker refreshes it asynchronously. Stored results still record
@@ -57,6 +58,8 @@ policy, update behavior, privacy, and the path toward millions of articles.
 - [ADR-0006](docs/decisions/0006-bot-exclusion.md): what counts as a bot, beyond the local flag.
 - [ADR-0007](docs/decisions/0007-cache-validation.md): why cached answers carry an `ETag` and
   expire in minutes rather than days.
+- [ADR-0008](docs/decisions/0008-article-opt-out.md): the on-wiki list of articles counted but
+  not named.
 - [Contributing](CONTRIBUTING.md): local workflow and change checklist.
 - [Agent guide](AGENTS.md): repository invariants and commands for coding agents.
 

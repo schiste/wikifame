@@ -56,6 +56,8 @@ class Settings:
     page_freshness_seconds: int
     page_cache_seconds: int
     page_stale_while_revalidate_seconds: int
+    optout_page: str
+    optout_category_limit: int
     methodology_url: str
 
     @classmethod
@@ -120,6 +122,16 @@ class Settings:
             page_stale_while_revalidate_seconds=int(
                 os.getenv("PAGE_STALE_WHILE_REVALIDATE_SECONDS", "604800")
             ),
+            # One title for every wiki. MediaWiki resolves the canonical "Project:" prefix
+            # to whatever the local project namespace is called — "Wikipédia:" on frwiki,
+            # "Wikipedia:" on enwiki, "פרויקט:" on hewiki — so a community finds the list
+            # where it would expect to and no per-wiki table has to be kept in step.
+            optout_page=os.getenv("OPTOUT_PAGE", "Project:WikiFame/opt-out"),
+            # A ceiling on how far one line of a list page can reach. Categories are not
+            # walked recursively, so this only bites on a genuinely enormous flat
+            # category; the sync logs the truncation rather than silently covering part
+            # of it, because "half of this category is opted out" is not an opt-out.
+            optout_category_limit=int(os.getenv("OPTOUT_CATEGORY_LIMIT", "5000")),
             methodology_url=os.getenv(
                 "METHODOLOGY_URL",
                 "https://github.com/schiste/wikifame/blob/main/docs/architecture.md",

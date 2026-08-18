@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import timedelta
 from typing import Any
@@ -9,7 +10,23 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import aliased
 
 from wikifame.db import Database
-from wikifame.models import ActiveWiki, AppState, AttributionResult, WorkItem, utcnow
+from wikifame.models import (
+    ActiveWiki,
+    AppState,
+    AttributionResult,
+    PageOptOut,
+    WorkItem,
+    utcnow,
+)
+
+
+@dataclass(frozen=True)
+class OptOutEntry:
+    """One article the on-wiki list resolves to, with the entry that named it."""
+
+    page_id: int
+    title: str
+    source: str
 
 
 @dataclass(frozen=True)
@@ -307,6 +324,65 @@ class Repository:
     def active_wikis(self) -> list[str]:
         with self.database.session() as session:
             return sorted(session.scalars(select(ActiveWiki.wiki)).all())
+
+    def is_opted_out(self, wiki: str, page_id: int) -> bool:
+        """Whether this page's contributors may be counted but not named.
+
+        On the serve path for every ready response, so it is a primary-key lookup and
+        nothing more. A page absent from the table is the overwhelmingly common case and
+        costs one index probe.
+        """
+        with self.database.session() as session:
+            return session.get(PageOptOut, (wiki, page_id)) is not None
+
+    def replace_optout(self, wiki: str, entries: Sequence[OptOutEntry]) -> tuple[int, int]:
+        """Make the stored list for one wiki match `entries` exactly. Returns (added, removed).
+
+        Only ever called after the on-wiki page has actually been read. An empty list is
+        a legitimate instruction — it means nobody is opted out any more — so a failed
+        read must raise long before it reaches here rather than arrive as an empty list
+        and quietly un-opt-out a whole wiki.
+        """
+        now = utcnow()
+        wanted = {entry.page_id: entry for entry in entries}
+        with self.database.session() as session, session.begin():
+            existing = {
+                row.page_id: row
+                for row in session.scalars(select(PageOptOut).where(PageOptOut.wiki == wiki))
+            }
+            removed = sorted(set(existing) - set(wanted))
+            if removed:
+                session.execute(
+                    delete(PageOptOut).where(
+                        PageOptOut.wiki == wiki, PageOptOut.page_id.in_(removed)
+                    )
+                )
+            added = 0
+            for page_id, entry in wanted.items():
+                row = existing.get(page_id)
+                if row is None:
+                    session.add(
+                        PageOptOut(
+                            wiki=wiki,
+                            page_id=page_id,
+                            title=entry.title,
+                            source=entry.source,
+                            synced_at=now,
+                        )
+                    )
+                    added += 1
+                else:
+                    row.title = entry.title
+                    row.source = entry.source
+                    row.synced_at = now
+        return added, len(removed)
+
+    def optout_counts(self) -> dict[str, int]:
+        with self.database.session() as session:
+            rows = session.execute(
+                select(PageOptOut.wiki, func.count()).group_by(PageOptOut.wiki)
+            ).all()
+            return {str(wiki): int(count) for wiki, count in rows}
 
     def get_state(self, key: str) -> str | None:
         with self.database.session() as session:
