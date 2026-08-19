@@ -137,6 +137,23 @@ def create_app(runtime: Runtime | None = None) -> FastAPI:
         max_age=86400,
     )
 
+    @app.get("/", include_in_schema=False)
+    def index() -> dict[str, Any]:
+        """Name the service at its root.
+
+        The root was a 404, which reads as a broken deployment to anyone who trims
+        a URL back to the host. It points at the docs rather than serving them, so
+        the landing page costs no database access.
+        """
+        return {
+            "name": "WikiPeople",
+            "description": "Cached WikiWho attribution for the WikiPeople gadget",
+            "docs": "/docs",
+            "health": "/healthz",
+            "stats": "/v1/stats",
+            "source": "https://github.com/schiste/wikifame",
+        }
+
     @app.get("/healthz", include_in_schema=False)
     def health() -> dict[str, str]:
         app_runtime.database.ping()

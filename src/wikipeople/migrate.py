@@ -25,6 +25,7 @@ from dataclasses import dataclass
 from sqlalchemy import Connection, Table, create_engine, delete, func, insert, select
 
 from wikipeople.models import Base
+from wikipeople.runtime import configure_logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -127,7 +128,7 @@ def main() -> None:
         help="empty the target's tables first instead of refusing to run",
     )
     args = parser.parse_args()
-    logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging()
 
     source_url = os.getenv(SOURCE_URL_VARIABLE)
     target_url = os.getenv(TARGET_URL_VARIABLE)

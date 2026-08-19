@@ -18,7 +18,7 @@ from wikipeople.clients import MediaWikiClient, PageMetadata, WikiWhoClient
 from wikipeople.errors import PermanentDataError, WikiPeopleError
 from wikipeople.models import utcnow
 from wikipeople.repository import Repository, WorkLease
-from wikipeople.runtime import Runtime, build_runtime
+from wikipeople.runtime import Runtime, build_runtime, configure_logging
 
 LOGGER = logging.getLogger(__name__)
 METRIC_TOKENS = "wikiwho-surviving-alphanumeric-tokens"
@@ -233,10 +233,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Process WikiPeople attribution jobs")
     parser.add_argument("--once", action="store_true", help="Process at most one job")
     args = parser.parse_args()
-    logging.basicConfig(
-        level=os.getenv("LOG_LEVEL", "INFO"),
-        format="%(asctime)s %(levelname)s %(name)s %(message)s",
-    )
+    configure_logging()
     runtime = build_runtime()
     runtime.database.create_schema()
     worker = Worker(runtime)

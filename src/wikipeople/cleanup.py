@@ -3,7 +3,7 @@ from __future__ import annotations
 import argparse
 import logging
 
-from wikipeople.runtime import build_runtime
+from wikipeople.runtime import build_runtime, configure_logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -13,7 +13,7 @@ def main() -> None:
     parser.add_argument("--queue-days", type=int, default=30)
     parser.add_argument("--old-revision-days", type=int, default=30)
     args = parser.parse_args()
-    logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging()
     runtime = build_runtime()
     runtime.database.create_schema()
     removed = runtime.repository.cleanup(args.queue_days, args.old_revision_days)

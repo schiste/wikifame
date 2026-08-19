@@ -129,15 +129,16 @@ class MediaWikiClient:
     def host(self, wiki: str) -> str:
         return self.resolver.host(wiki)
 
-    def _action(self, wiki: str, params: dict[str, Any]) -> dict[str, Any]:
-        return self._request(self.host(wiki), params)
+    def _action(self, wiki: str, params: dict[str, Any], *, method: str = "GET") -> dict[str, Any]:
+        return self._request(self.host(wiki), params, method=method)
 
-    def _request(self, host: str, params: dict[str, Any]) -> dict[str, Any]:
+    def _request(self, host: str, params: dict[str, Any], *, method: str = "GET") -> dict[str, Any]:
+        payload = {"format": "json", "formatversion": 2, **params}
         try:
-            response = self.client.get(
-                f"https://{host}/w/api.php",
-                params={"format": "json", "formatversion": 2, **params},
-            )
+            if method == "POST":
+                response = self.client.post(f"https://{host}/w/api.php", data=payload)
+            else:
+                response = self.client.get(f"https://{host}/w/api.php", params=payload)
             response.raise_for_status()
             data = response.json()
         except (httpx.HTTPError, ValueError) as error:
@@ -479,6 +480,15 @@ class MediaWikiClient:
         return members[:limit], True
 
     def resolve_titles(self, wiki: str, titles: list[str]) -> list[PageMetadata]:
+        """Resolve titles to page metadata, 50 at a time (the Action API limit).
+
+        Sent over POST: fifty titles fit the API limit but not always a URL. A
+        Latin title costs about its own length once percent-encoded; a Cyrillic,
+        Greek, or CJK one costs roughly six bytes per character, and a batch of
+        those overran the server's URL limit and returned 414, which skipped the
+        whole wiki. POST carries the titles in the body, so the request size stops
+        depending on the alphabet instead of being tuned for it.
+        """
         pages: list[PageMetadata] = []
         for start in range(0, len(titles), 50):
             data = self._action(
@@ -490,6 +500,7 @@ class MediaWikiClient:
                     "prop": "revisions",
                     "rvprop": "ids",
                 },
+                method="POST",
             )
             for page in data.get("query", {}).get("pages", []):
                 revisions = page.get("revisions", [])

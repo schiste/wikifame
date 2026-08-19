@@ -27,7 +27,7 @@ from wikipeople.errors import WikiPeopleError
 from wikipeople.models import utcnow
 from wikipeople.policy import AccountStanding
 from wikipeople.repository import StandingRecord
-from wikipeople.runtime import Runtime, build_runtime
+from wikipeople.runtime import Runtime, build_runtime, configure_logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -154,7 +154,7 @@ def main() -> None:
         help="Report what would be read without changing what is served",
     )
     args = parser.parse_args()
-    logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging()
 
     runtime = build_runtime()
     runtime.database.create_schema()

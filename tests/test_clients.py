@@ -278,3 +278,40 @@ def test_an_account_that_is_not_locked_says_nothing_about_it() -> None:
 
     assert client.global_user_info("frwiki", "Schiste").locked is False
     client.close()
+
+
+def test_resolving_titles_sends_them_in_the_body_not_the_url() -> None:
+    """Fifty titles fit the API's limit but not always a URL.
+
+    A batch of Cyrillic titles is well under `titles`'s limit of 50 and still
+    overran the server's URL limit once percent-encoded, returning 414 and
+    skipping the whole wiki's prewarm. The form-encoded body carries the same
+    percent-encoding expansion -- what changes is that the bytes land somewhere
+    without the URL's length limit, so this asserts on where they go.
+    """
+    client, requests = make_category_client(
+        [
+            {
+                "query": {
+                    "pages": [
+                        {
+                            "pageid": 7,
+                            "ns": 0,
+                            "title": "Толстой",
+                            "revisions": [{"revid": 9}],
+                        }
+                    ]
+                }
+            }
+        ]
+    )
+
+    pages = client.resolve_titles("ruwiki", ["Толстой Лев Николаевич писатель" * 3] * 50)
+
+    assert len(requests) == 1
+    assert requests[0].method == "POST"
+    assert len(str(requests[0].url)) < 200
+    assert "titles=" in requests[0].content.decode()
+    assert "titles=" not in str(requests[0].url)
+    assert pages[0].page_id == 7
+    client.close()

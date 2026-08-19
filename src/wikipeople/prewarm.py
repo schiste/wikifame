@@ -6,7 +6,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from wikipeople.clients import AnalyticsClient, MediaWikiClient
 from wikipeople.errors import RetryableUpstreamError, WikiPeopleError
-from wikipeople.runtime import Runtime, build_runtime
+from wikipeople.runtime import Runtime, build_runtime, configure_logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -87,7 +87,7 @@ def main() -> None:
     parser.add_argument("--wiki", default=None, help="Override the discovered wiki list")
     parser.add_argument("--days", type=int, default=7)
     args = parser.parse_args()
-    logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging()
 
     runtime = build_runtime()
     runtime.database.create_schema()

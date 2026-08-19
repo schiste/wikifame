@@ -20,7 +20,7 @@ import re
 from wikipeople.clients import MediaWikiClient
 from wikipeople.errors import WikiPeopleError
 from wikipeople.repository import OptOutEntry
-from wikipeople.runtime import Runtime, build_runtime
+from wikipeople.runtime import Runtime, build_runtime, configure_logging
 
 LOGGER = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ def main() -> None:
         help="Report what the list covers without changing what is served",
     )
     args = parser.parse_args()
-    logging.basicConfig(level="INFO", format="%(asctime)s %(levelname)s %(message)s")
+    configure_logging()
 
     runtime = build_runtime()
     runtime.database.create_schema()
