@@ -152,6 +152,11 @@ start; no migration is required either. Its environment controls are:
   wikis discovered automatically.
 - `BACKFILL_WIKIS` (default empty): wikis crawled article by article. Never inferred.
 - `WIKIWHO_LANGUAGES` (default empty): overrides the built-in WikiWho coverage list.
+- `BACKFILL_BATCH_SIZE` (default `500`): articles enqueued per hourly backfill batch.
+- `REPLICA_HOST_TEMPLATE` (default `{wiki}.analytics.db.svc.wikimedia.cloud`): only worth
+  changing to point the backfill at the web replicas, which is the wrong cluster for a scan.
+- `TOOL_REPLICA_USER` / `TOOL_REPLICA_PASSWORD`: set by Toolforge, not by the maintainer. The
+  backfill reads them to order its work; without them it falls back to title order.
 - `CORS_ORIGIN_REGEX` (default matches every Wikipedia, desktop and mobile).
 
 Toolforge environment-variable configuration is deployment state, not source code. Record the
@@ -174,6 +179,39 @@ python -m wikipeople.prewarm --wiki dewiki --days 1
 
 Enable `BACKFILL_WIKIS` only after measuring row size. English Wikipedia alone has millions of
 articles against a nominal 25 GB ToolsDB boundary.
+
+### Why the backfill works down from the heaviest article
+
+No wiki gets backfilled to completion. frwiki has 2.8 million articles outside redirects and the
+worker sustains roughly 13,000 attributions a day, so a full pass is seven months; enwiki is a
+decade. The backfill is therefore not a job that finishes, and the only question it answers is
+*which* pages are cached at any moment.
+
+It used to walk `allpages`, which orders titles by byte value. `(` sorts before every letter, so
+the walk entered frwiki's asteroid designations immediately and stayed there: after three days,
+36,046 of 41,783 cached frwiki rows were `(NNNN) Name` articles, the newest with three
+attributable tokens. Meanwhile 57% of the main namespace is redirects, which sort in among the
+articles and were being attributed too.
+
+So the source is now the analytics replica, ordered by `page_len` descending and filtered to
+non-redirects — the index MediaWiki already keeps, `page_redirect_namespace_len`, is the one this
+query needs. Size is a proxy for "an article where authorship has an answer worth caching", not a
+merit ranking; it is used because it is a proxy the replica can sort on exactly. The 220,000
+frwiki articles above 20 KB are about three weeks of work.
+
+The cursor is a keyset, `page_len:page_id`, stored under `backfill:{wiki}:length-cursor`. The page
+id is there to break ties: tens of thousands of pages share a length, and a batch boundary inside
+a tie would otherwise skip or repeat them. A wiki whose replica is unreachable falls back to the
+Action API in title order, under its own separate cursor key.
+
+Redirects are refused twice, because filtering the source is not enough: a reader opening a
+redirect makes the endpoint enqueue it, and the endpoint may not call MediaWiki to find out. The
+worker has already fetched the page when it decides, so that is where the second refusal lives.
+
+There is no cap on how many pages may be cached, and no eviction. `cache-cleanup` only removes
+superseded duplicates and old dead queue rows; a current result is never deleted to make room.
+Growth is bounded by what the backfill enqueues, which is why its order is the design decision and
+its rate is not.
 
 ### The on-wiki configuration page
 
@@ -233,7 +271,7 @@ Then inspect webservice logs and check that both worker replicas are running.
 | --- | --- | --- |
 | `attribution-worker` | Continuous, two replicas | Claims durable jobs and calls WikiWho |
 | `popular-prewarm` | Daily | Per active wiki, scans backward to enqueue seven available top-1000 lists at P50 |
-| `gradual-backfill` | Hourly | Per `BACKFILL_WIKIS` entry, enqueues one resumable alphabetical batch at P10 |
+| `gradual-backfill` | Hourly | Per `BACKFILL_WIKIS` entry, enqueues one resumable batch of the heaviest uncached articles at P10 |
 | `cache-cleanup` | Weekly | Removes old failed work and superseded result revisions |
 | `optout-sync` | Every 15 minutes | Per active wiki, materialises the on-wiki opt-out list into `page_optout` |
 | `standing-sync` | Hourly | Per active wiki, refreshes block and lock status for named accounts into `contributor_standing` |

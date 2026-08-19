@@ -87,6 +87,13 @@ class Worker:
         if page.namespace != 0:
             self.repository.supersede(lease.id, "La page n’est plus dans l’espace principal")
             return
+        if page.is_redirect:
+            # The other half of excluding redirects. Keeping them out of the backfill
+            # source is not enough: a reader opening a redirect makes the endpoint
+            # enqueue it, and the endpoint cannot tell -- it may not call MediaWiki.
+            # So the refusal happens here, where the page has already been fetched.
+            self.repository.supersede(lease.id, "La page est une redirection")
+            return
         if page.revision_id != lease.revision_id:
             self.repository.supersede(
                 lease.id,

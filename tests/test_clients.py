@@ -315,3 +315,41 @@ def test_resolving_titles_sends_them_in_the_body_not_the_url() -> None:
     assert "titles=" not in str(requests[0].url)
     assert pages[0].page_id == 7
     client.close()
+
+
+def test_the_title_walk_skips_redirects() -> None:
+    """The Action API fallback must exclude redirects too, not just the replica path.
+
+    57% of frwiki's main namespace is redirects and they sort in among the articles,
+    so an unfiltered walk spent more than half the WikiWho budget on pages that are
+    one line of wikitext pointing elsewhere.
+    """
+    client, requests = make_category_client([{"query": {"pages": []}}])
+
+    client.all_pages_batch("frwiki", None)
+
+    assert "gapfilterredir=nonredirects" in str(requests[0].url)
+    client.close()
+
+
+def test_get_page_reports_a_redirect() -> None:
+    client, _ = make_category_client(
+        [
+            {
+                "query": {
+                    "pages": [
+                        {
+                            "pageid": 17556072,
+                            "ns": 0,
+                            "title": '"Heroes"',
+                            "redirect": True,
+                            "revisions": [{"revid": 238456872}],
+                        }
+                    ]
+                }
+            }
+        ]
+    )
+
+    assert client.get_page("frwiki", 17556072).is_redirect is True
+    client.close()

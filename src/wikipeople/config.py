@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from functools import lru_cache
 from urllib.parse import quote_plus
 
+from wikipeople.replica import DEFAULT_HOST_TEMPLATE
 from wikipeople.sites import ALL_WIKIS, DEFAULT_WIKIWHO_LANGUAGES
 
 
@@ -86,6 +87,10 @@ class Settings:
     standing_lock_checks_per_run: int
     standing_lock_recheck_seconds: int
     methodology_url: str
+    replica_user: str
+    replica_password: str
+    replica_host_template: str
+    backfill_batch_size: int
 
     def max_visible_block_seconds_for(self, wiki: str) -> int:
         """The longest block an account may carry on this wiki and still be named.
@@ -196,6 +201,13 @@ class Settings:
                 "METHODOLOGY_URL",
                 "https://github.com/schiste/wikifame/blob/main/docs/architecture.md",
             ),
+            # Toolforge sets the TOOL_REPLICA_* pair itself; empty outside Toolforge,
+            # which is what makes the backfill fall back to the Action API in tests
+            # and on a laptop rather than needing a flag to say so.
+            replica_user=os.getenv("TOOL_REPLICA_USER", ""),
+            replica_password=os.getenv("TOOL_REPLICA_PASSWORD", ""),
+            replica_host_template=os.getenv("REPLICA_HOST_TEMPLATE", DEFAULT_HOST_TEMPLATE),
+            backfill_batch_size=int(os.getenv("BACKFILL_BATCH_SIZE", "500")),
         )
 
 

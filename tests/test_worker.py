@@ -313,3 +313,24 @@ def test_worker_refreshes_expired_result_for_unchanged_revision(tmp_path: Path) 
     assert refreshed.computed_at > old_computed_at
     assert refreshed.metric == "wikiwho-surviving-alphanumeric-tokens"
     assert runtime.repository.get_work("frwiki", 100, 200, settings.algorithm_version) is None
+
+
+class RedirectMediaWiki(FakeMediaWiki):
+    def get_page(self, _wiki: str, page_id: int) -> PageMetadata:
+        return PageMetadata(page_id, 200, '"Heroes"', 0, is_redirect=True)
+
+
+def test_a_redirect_is_refused_rather_than_attributed(tmp_path: Path) -> None:
+    """Keeping redirects out of the backfill source does not keep them out of the queue.
+
+    The endpoint enqueues whatever page id a reader opens and cannot tell a redirect
+    from an article, because it may not call MediaWiki. So a 46-byte redirect reached
+    the worker and got a cached attribution row with six tokens. The worker has the
+    page in hand by then, which makes it the one place the refusal can happen.
+    """
+    worker = build_worker(tmp_path, "redirect.db", RedirectMediaWiki(), FakeWikiWho())
+
+    assert worker.run_once() is True
+    assert stored(worker) is None
+    work = worker.repository.get_work("frwiki", 100, 200, worker.settings.algorithm_version)
+    assert work is not None and work.state == "superseded"

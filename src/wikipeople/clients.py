@@ -59,6 +59,7 @@ class PageMetadata:
     revision_id: int
     title: str
     namespace: int
+    is_redirect: bool = False
 
 
 @dataclass(frozen=True)
@@ -153,7 +154,10 @@ class MediaWikiClient:
             {
                 "action": "query",
                 "pageids": page_id,
-                "prop": "revisions",
+                # `info` costs nothing here and is what carries `redirect`. The worker
+                # refuses redirects on the strength of it, which is the only place the
+                # refusal can live: the request path may not call MediaWiki.
+                "prop": "revisions|info",
                 "rvprop": "ids",
             },
         )
@@ -169,6 +173,7 @@ class MediaWikiClient:
             revision_id=int(revisions[0]["revid"]),
             title=str(page["title"]),
             namespace=int(page["ns"]),
+            is_redirect=bool(page.get("redirect")),
         )
 
     def get_editor_count(self, wiki: str, title: str) -> EditorCount:
@@ -523,6 +528,10 @@ class MediaWikiClient:
             "action": "query",
             "generator": "allpages",
             "gapnamespace": 0,
+            # 57% of frwiki's main namespace is redirects, and they sort in among the
+            # articles, so an unfiltered walk spent more than half its WikiWho budget
+            # attributing pages that are one line of wikitext pointing elsewhere.
+            "gapfilterredir": "nonredirects",
             "gaplimit": "max",
             "prop": "revisions",
             "rvprop": "ids",
