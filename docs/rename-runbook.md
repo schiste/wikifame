@@ -185,8 +185,9 @@ The only window where anything can look broken. Do it in one sitting.
      --command "python -m wikipeople.migrate --force-empty" --mount all --wait
    toolforge jobs logs migrate-once
 
-   toolforge envvars delete MIGRATE_SOURCE_URL --yes-im-sure   # see the warning below
-   toolforge envvars delete MIGRATE_TARGET_URL --yes-im-sure
+   # redirect: this command echoes the value it deletes. See the warning below.
+   toolforge envvars delete MIGRATE_SOURCE_URL --yes-im-sure > /dev/null 2>&1
+   toolforge envvars delete MIGRATE_TARGET_URL --yes-im-sure > /dev/null 2>&1
    ```
 
    Build the new tool's image *before* this step, not in step 4 — the `migrate` module
@@ -200,11 +201,34 @@ The only window where anything can look broken. Do it in one sitting.
    It exits non-zero if any table's three counts disagree, but read them anyway.
 
    > **`toolforge envvars delete` prints the deleted value in clear text.** Not the name —
-   > the value. Deleting a variable that held a DSN therefore writes a database password to
-   > the terminal, and to whatever captured it. There is no quiet flag. Assume both ToolsDB
-   > passwords are disclosed once this step runs and rotate them; the alternative is to keep
-   > the variables and accept that credentials for the old database sit in the new tool's
-   > configuration indefinitely, which is worse.
+   > the value. Deleting a variable that held a DSN writes a database password to the
+   > terminal and to whatever captured it: scrollback, a session log, an agent transcript.
+   > There is no quiet flag, so redirect the output. That redirection is the whole fix, and
+   > it is cheaper than everything below.
+
+   If it is echoed anyway, measure the blast radius before asking anyone to rotate. The
+   credential grants `ALL PRIVILEGES` on `sNNNNN__%` and `SELECT` on `%_p` — nothing else,
+   no wiki rights and no shell — and `tools.db.svc.wikimedia.cloud` is not routable from
+   outside WMCS, so spending it requires an already-approved developer account. The damage
+   that would actually reach a third party is not deletion, which the workers recompute,
+   but false rows in `attribution_results`, which the gadget renders under an article as a
+   contributor's name.
+
+   There is no self-service rotation. `replica.my.cnf` is written by the `maintain-dbusers`
+   service and carries the immutable bit; an admin must run
+
+   ```
+   sudo /usr/local/sbin/maintain-dbusers delete tools.<tool> --account-type=tool
+   ```
+
+   on the cloudcontrol host that runs the service, after which it recreates the account.
+   Reading its source is what makes this safe to ask for: `delete_account()` issues
+   `DROP USER` on every host in `labsdbs.hosts` (ToolsDB is the `legacy`-grant one) and
+   deletes the `account` row holding the hash, so the recreate generates a fresh password.
+   `DROP USER` does not touch databases, and the username is `s<uidNumber>` from LDAP and
+   therefore stable, so the rebuilt grants cover the same data. The catch: `TOOL_TOOLSDB_*`
+   are documented as set once, not resynchronised, so the tool may keep presenting the old
+   password until someone redeploys. Ask about that in the ticket rather than finding out.
 4. Deploy the renamed repository to the new tool and start its jobs:
 
    ```bash
